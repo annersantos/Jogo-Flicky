@@ -1,225 +1,155 @@
-# Plano de Implementação — "Flicky do Jardim" (Campanha de 10 fases)
+# Plano de Implementação — Adaptação para Navegador de Celular
 
-Jogo de plataforma arcade 2D (Canvas 2D, HTML5 + CSS + JavaScript puro), tela fixa,
-arena inteira sempre visível. Este plano cobre a ** expansão de 1 fase para uma
-campanha de 10 fases completas**, preservando a fase 1 e todas as mecânicas que já
-funcionam (física de passo fixo, fila por histórico de percurso, dispersão, vidas,
-pausa, áudio sintetizado, controles de toque).
+> Jogo: **Flicky do Jardim** — campanha de 10 fases já existente.
+> Objetivo: adaptar o jogo (que já funciona no desktop) para navegador de celular,
+> com controles por toque, interface responsiva e boa fluidez — **preservando fases,
+> progressão, pontuação, vidas, inimigos e sistema de resgate**.
+> Alterações feitas na raiz do projeto, sem criar uma versão separada.
 
----
+## Skills aplicadas
 
-## 1. Análise da estrutura atual e das skills disponíveis
-
-### Skills localizadas e lidas
-
-| Skill | Arquivo | Aplicação nesta tarefa |
+| Skill | Arquivos lidos | Aplicação neste plano |
 | --- | --- | --- |
-| `game-development` | `.agents/skills/game-development/SKILL.md` | Roteou para os sub-skills usados abaixo. |
-| `game-development/2d-games` | `2d-games/SKILL.md` | Passo de tempo fixo, colisão simplificada/AABB, plataformas one-way, coyote time, jump buffer, salto variável, animação 8–24 FPS, squash/stretch leve. |
-| `game-development/game-design` | `game-design/SKILL.md` | Loop de 30 s (mover→pular→coletar→entregar), progressão de dificuldade, estado de fluxo, recompensa progressiva, anti-pattern "punir em excesso". |
-| `game-development/mobile-games` | `mobile-games/SKILL.md` | Alvos de toque ≥ 44 px, feedback visual no toque, pausa ao perder o foco, suporte a retrato/paisagem, sem controles de desktop no mobile. |
-| `game-development/web-games` | `web-games/SKILL.md` | Canvas puro (jogo 2D leve), áudio exige interação do usuário, pausa quando a aba fica oculta, sem carregamento de assets externos. |
-| `frontend-design` | `frontend-design/SKILL.md` + `ux-psychology.md` (obrigatório) | Hierarquia do HUD (Fitts/Von Restorff no CTA), alvos de 44 px, contraste figura/fundo nas paletas, feedback imediato (<400 ms), regra dos 8 px, telas finais memoráveis (Peak-End). |
-| `app-builder` | `app-builder/SKILL.md` + `feature-building.md` | Análise da feature (10 fases + arremesso + telas), separação de dados × lógica, integração por um carregador central, validação e preview. |
+| `game-development` | `SKILL.md` + sub-skills `mobile-games`, `web-games` | Abstração de entrada em **AÇÕES** (não teclas crus), passo de tempo fixo, pausa quando oculto, áudio exige interação, alvo de toque ≥44px, feedback visual, suporte a retrato/paisagem, não forçar orientação, sem controls desktop genéricos no mobile |
+| `frontend-design` | `SKILL.md` + `ux-psychology.md` (obrigatório) | **Fitts**: botões ≥48px perto dos polegares; **Von Restorff**: arremesso com cor distinta; **feedback ≤400ms** ao pressionar; sem dependência de `hover`; hierarquia HUD → arena → controles |
+| `app-builder` | `SKILL.md` + `feature-building.md` | Análise do projeto existente → plano → alterações integradas na estrutura atual → testes → documentação; nada de segunda cópia do projeto |
 
-Todas as três skills solicitadas estavam disponíveis; nenhuma precisou ser ignorada.
-
-### Estrutura existente (mantida e estendida)
-
-- `index.html` / `style.css` — HUD, canvas 480×270, controles de toque, overlays.
-- `js/sprites.js` — pixel art gerada por código (pássaro, filhote, gato, ícones).
-- `js/audio.js` — sons sintetizados (Web Audio), botão de mudo.
-- `js/level.js` — **atualmente**: uma fase fixa + cenário de jardim.
-- `js/game.js` — laço, física, fila por histórico, gatos, estados, HUD.
-- `tests/headless.js` (67 asserções) e `tests/render.js` (PNGs de inspeção).
-- `.agents/` — documentação de skills (preservada, fora do jogo).
-
-### Mudanças estruturais previstas
-
-- **Novo** `js/levels.js` — apenas **dados**: as 10 configurações de fase
-  (plataformas, porta, spawn, filhotes, gatos, objetos, pontos seguros, tema,
-  dificuldade). Nenhuma lógica.
-- `js/level.js` passa a ser o **carregador central**: `LEVEL.load(indice)` ativa a
-  fase, faz cache do cenário por fase e expõe os dados ativos (getters).
-- `js/game.js` ganha máquina de estados `menu | play | pause | complete | over |
-  victory`, arremesso, atordoamento de gatos, bônus de tempo, recorde e progressão.
-- `index.html`/`style.css` — HUD ampliado (Fase/Recorde), botão de arremesso,
-  telas de conclusão/vitória, instruções do menu.
-
-**Critério de conclusão (etapa 1):** skills lidas e aplicadas; arquivo de plano
-atualizado com as 9 seções; nenhum arquivo pré-existente do jogo apagado.
+Todas as skills solicitadas estavam disponíveis.
 
 ---
 
-## 2. Organização das configurações das 10 fases
+## 1. Análise do Canvas, layout e sistema de entrada existentes
 
-Cada fase é um objeto de **dados** em `js/levels.js`:
+### O que existe hoje (verificado no código)
 
-```js
-{
-  nome: 'Jardim inicial',     tema: 'garden',
-  platforms: [{x,y,w}...],    // y ∈ {198,150,102,54} + chão em 246
-  door: {x,y,w,h},            spawn: {x,y},
-  chicks: [{x,y}...],         // sempre sobre uma plataforma
-  cats: [{x,y,x1,x2,dir}...], // patrulha contida na superfície (chão/plataforma)
-  safePoints: [{x,y}...],     // superfícies válidas e alcançáveis
-  throwables: [{x,y}...],     // objetos arremessáveis (repouso sobre superfície)
-  speedMul, chaseRange        // dificuldade da fase
-}
-```
+**Canvas/renderização (`js/game.js`, `js/level.js`)**
+- Resolução lógica fixa 480×270 (`LEVEL.W/H`); `canvas.width/height` fixados em 480×270 no `boot()`.
+- O cenário é pré-renderizado uma vez em canvas offscreen 480×270 com **cache por fase** (`LEVEL.buildScenery`) e desenhado a cada quadro com `drawImage(scenery, 0, 0)`.
+- CSS estica o canvas com `width/height: 100%` + `image-rendering: pixelated` — **não há tratamento de `devicePixelRatio`** nem limite configurável; `imageSmoothingEnabled = false` é definido **uma única vez** no boot (um redimensionamento de canvas zera esse estado).
+- Laço: **um único** `requestAnimationFrame` (guarda `booted`), passo fixo `STEP = 1/120` com acumulador, clamp `dt > 0.25`, `last/acc` zerados ao retomar da pausa.
+- Sem `resize`/`orientationchange` — o canvas só é dimensionado no boot.
 
-- Constantes de arena: 480×270, chão em y=246, degraus de **48 px**
-  (198/150/102/54) com salto máx. ≈ 67,6 px e alcance horizontal ≥ 45 px.
-- Distribuição obrigatória: filhotes **6/7/8/8/9/9/10/10/11/12**,
-  gatos **2/2/3/3/3/4/4/4/5/5** (tabela do enunciado).
-- `speedMul` progressivo e limitado: 1,0 → 1,05 → 1,1 → 1,15 → 1,2 → 1,25 → 1,3
-  (patrulha 42 → máx. ~55 px/s, perseguição 66 → ~86 px/s, tempo de reação
-  preservado); `chaseRange` 130 → 180 px.
-- Temas: `garden, vila, forest, rooftops, dusk, warehouse, factory, night, tower,
-  finale` — cada um com paleta de céu/chão/plataforma/porta e decoração próprias.
+**Layout (`index.html`, `style.css`)**
+- Estrutura em coluna: `#hud` → `#stage` (canvas + **controles de toque dentro da arena**) → `#hint`.
+- Os botões de toque são `position: absolute` **dentro de `#stage`** → os dedos **cobrem personagens/plataformas** (fundo da arena).
+- Viewport: `maximum-scale=1, user-scalable=no` → **bloqueia zoom global** (contra a exigência de ampliar textos das instruções).
+- `touch-action: none` no `html/body` → bloqueia também gestos dentro dos painéis de instrução (interseção de ancestrais).
+- Áreas seguras: apenas `padding` com `env(safe-area-inset-*)` no `body`; sem distinção vertical/horizontal de layout (retrato usa o mesmo fluxo de paisagem).
+- Controles de pausa só por teclado (Esc/P) — **não há botão de pausa** para toque; som tem botão (`#btnMute`), sem persistência da preferência.
 
-**Critério de conclusão (etapa 2):** `js/levels.js` contém 10 objetos completos,
-contagens exatas da tabela, sem lógica misturada.
+**Entrada (`js/game.js`)**
+- Teclado e toque escrevem nos **mesmos campos** de `input`, mas **sem rastreio por origem**: soltar o toque zera a ação mesmo que a tecla continue pressionada (e vice-versa) → entrada não verdadeiramente unificada.
+- Ponteiros já usam `setPointerCapture`, mas **sem mapa `pointerId → ação`** (dois dedos no mesmo botão ou deslizamentos não são acompanhados individualmente) e sem estado visual `.pressed` confiável (depende de `:active`).
+- `clearInput()` é chamado em pausa/mudança de fase, mas **não limpa as origens** dos botões.
+- Áudio (`js/audio.js`): `init()` na primeira interação e `resume()` em `play()`; **sem `suspend()` na visibilidade**; preferência de som **não persiste** em `localStorage`.
 
----
+### Lacunas mapeadas para as seções 2–6
 
-## 3. Sistema de carregamento e transição
-
-- `LEVEL.load(indice)` (1..10) ativa a fase, comenta o cenário no cache e devolve
-  a configuração; `game.js` guarda `LV` e nunca duplica lógica por fase.
-- `loadPhase(n)` no jogo: limpa **fila, soltos, gatos, objetos, partículas,
-  textos, histórico, comandos, invulnerabilidade e cronômetro**; recoloca o
-  jogador no spawn; zera `Resgatados` (alvo = nº de filhotes da fase); mantém
-  **pontuação e vidas**.
-- `startCampaign()` — fase 1, 3 vidas, pontuação 0, recorde carregado do
-  `localStorage`; usado por "Jogar", "Nova campanha" e "Jogar novamente".
-- `nextPhase()` — `loadPhase(n+1)` + som de transição; botão "Próxima fase" (fases 1–9).
-- Máquina de estados única: `menu | play | pause | complete | over | victory`.
-  O laço `requestAnimationFrame` só é registrado **uma vez** no boot; o passo de
-  física roda exclusivamente quando `state === 'play'` (pausa/conclusão/congelados).
-- Guardas: `tryDeliver()` só age em `play` (sem conclusão duplicada), transição
-  troca de estado antes de qualquer efeito colateral, `boot()` idempotente.
-
-**Critério de conclusão (etapa 3):** trocar de fase não deixa resíduos (fila,
-histórico, partículas, comandos zerados), cronômetro zera e não há laço duplicado.
+| # | Exigência | Situação atual | Trabalho necessário |
+| --- | --- | --- | --- |
+| 2 | Entrada unificada por ações | Parcial (campos comuns, sem origens) | Sistema de ações com origens `kbd`/`ptr` |
+| 3 | Multitoque individual + captura | Parcial (captura sim, mapa não) | Mapa `pointerId→ação`, refcount, `.pressed` |
+| 4 | Retrato/paisagem separando controles da arena | Não (controles dentro da arena) | Novo `#mid` em grade, controles fora |
+| 5 | Foco/pausa/rotação/áudio | Foco✓, rotação✗, áudio parcial | `pagehide`, rotação sem reinício, `SFX.suspend/resume`, persistir som |
+| 6 | Renderização/desempenho com DPR | Sem DPR, sem resize | `resizeCanvas()` com `DPR_CAP`, transform, sem realocações por quadro |
+| 7 | Validação e documentação | Suíte da campanha (357) | Novas seções de teste mobile + README |
 
 ---
 
-## 4. Construção dos nove novos layouts
+## 2. Unificação dos comandos de teclado e toque
 
-| Fase | Tema | Plataformas (ideia) | Filhotes | Gatos |
-| --- | --- | --- | --- | --- |
-| 1 | Jardim inicial | **Layout original preservado** (6 plataformas) | 6 | 2 |
-| 2 | Vila colorida | 7 plataformas com vãos largos (mais espaçadas) | 7 | 2 |
-| 3 | Bosque | 3 torres (esq/centro/dir) + ponte = rotas alternativas | 8 | 3 |
-| 4 | Telhados da vila | 14 telhados nas 4 alturas (mais mudanças de altura) | 8 | 3 |
-| 5 | Parque ao entardecer | 3 corredores horizontais com vãos que cruzam patrulhas | 9 | 3 |
-| 6 | Armazém | 9 prateleiras em corredores (grade 2+4+3) | 9 | 4 |
-| 7 | Fábrica | 3 rotas verticais + 6 conexões = decisões de percurso | 10 | 4 |
-| 8 | Cidade noturna | Skyline escalonado (5+4+3+2) com patrulhas rápidas | 10 | 4 |
-| 9 | Torre dos pássaros | 15 degraus espiralados em 4 alturas (vertical elaborado) | 11 | 5 |
-| 10 | Jardim da grande fuga | Grade 4+4+3+4 combinando todos os desafios | 12 | 5 |
+**Tarefas**
+- [x] Criar `setAction(nome, origem, pressionado)` com mapa de origens por ação (`{kbd, ptr}`) e valor final `input[nome] = kbd || ptr`.
+- [x] Transição `false → true` dispara o evento de borda: `jumpQueued` (um salto por pressionamento) e `throwQueued` (um arremesso por pressionamento; auto-repeat do teclado não re-enfileira).
+- [x] Teclado e botões de toque passam a chamar `setAction` — mesma camada de ações para os dois dispositivos (teclas crus não tocam mais em `input` diretamente).
+- [x] Ações ignoradas quando `state !== 'play'` (exceto pausa/menu), para nenhum comando “pendurar” entre estados.
+- [x] `clearInput()` também zera todas as origens e remove a classe visual `.pressed` — chamado em **pausa, perda de foco, ocultar aba e mudança de fase**.
 
-Regras de construção (validadas por teste):
-
-- Subida: vão ≤ 45 px e Δy ≤ 48 px; descida: vão ≤ 85 px (alcance real do salto).
-- BFS do chão a todas as plataformas; todo filhote sobre plataforma alcançável;
-  porta no chão; pontos seguros sobre superfícies; gatos com `x1..x2` contidos na
-  superfície; spawn do jogador livre de gatos e filhotes.
-- Cenário por tema (céu, chão, decoração, plataformas e porta com paleta própria),
-  pré-renderizado em canvas com cache — legibilidade figura/fundo em todos os temas.
-
-**Critério de conclusão (etapa 4):** os 10 layouts passam no BFS e nas checagens
-de dados; os 9 novos visivelmente distintos (screenshots por tema).
+**Critério de conclusão**
+- Segurar esquerda no teclado **e** no toque, soltar um → a ação continua ativa enquanto a outra origem persistir; soltar as duas → para.
+- Suíte existente (357 asserções) segue verde, pois `input` continua sendo o mesmo objeto mutável exposto em `Flicky.input`.
 
 ---
 
-## 5. Ajustes de inimigos, dificuldade e objetos arremessáveis
+## 3. Implementação dos controles com multitoque
 
-- Gatos: patrulha contida na superfície + perseguição quando `|Δy| < 28` e
-  `|Δx| < chaseRange`, sempre **respeitando os limites da geometria** (nunca saem
-  da plataforma nem aparecem sobre o spawn do jogador).
-- Velocidade progressiva por fase com teto (`speedMul ≤ 1,3`) — preserva reação.
-- **Arremesso (novo):** objeto em repouso é coletado ao encostar (1 por vez,
-  desenhado sobre o pássaro); `X`/`J`/botão lança na direção do olhar com leve
-  arco; acerto no gato → **+100 pontos (uma única vez por acerto)** e gato
-  **atordoado** (fora de ação, fantasma piscante) → desaparece e **reaparece num
-  ponto seguro** da patrulha (longe do jogador) após 2,5 s com partículas.
-  Objeto que erra pousa e pode ser recolhido.
-- Gato atordoado não fere jogador nem filhotes; gato atinge fila → dispersão
-  preservada; gato atinge filhote solto → susto/empurrão preservados.
-- Fase 1 continua acessível (2 gatos lentos, objetos à mão perto do spawn).
+**Tarefas**
+- [x] 4 botões: esquerda/direita (polegar esquerdo), arremesso/salto (polegar direito) — IDs `btnLeft/btnRight/btnThrow/btnJump` preservados.
+- [x] `pointerdown` registra `pointerIds[ação] = pointerId` (um dedo por ação, acompanhamento individual), chama `setPointerCapture` (evita comando preso ao sair do botão).
+- [x] `pointerup`, `pointercancel` e `lostpointercapture` liberam **apenas** aquele ponteiro e reavaliam a ação.
+- [x] Resposta visual `.pressed` (cor + deslocamento) enquanto pressionado — independente de `:hover`.
+- [x] Área de toque ≥ **48×48px CSS** (`min-width/min-height` + `clamp` maior quando há espaço).
+- [x] Botões de **pausa** (`#btnPause`) e **tela cheia** (`#btnFull`, exibido só se a API existir) no HUD, junto do som (`#btnMute`) — todos com `aria-label`.
+- [x] Texto do menu/pausa adaptado quando o aparelho tem entrada por toque (detecção por `matchMedia`/`maxTouchPoints` com guarda para testes headless).
 
-**Critério de conclusão (etapa 5):** arremesso coleta/lança/acerta/erram,
-+100 contados uma vez, gato atordoa e ressurge com segurança; nenhuma mecânica
-antiga quebrou.
+**Critério de conclusão**
+- Andar + pular simultâneos e andar + arremessar simultâneos via toque (2 dedos) verificados em teste.
+- `pointerup`/`pointercancel` interrompe o comando; tocar na arena (canvas) não dispara ações.
 
 ---
 
-## 6. Pontuação acumulada e bônus de conclusão
+## 4. Adaptação dos layouts vertical e horizontal
 
-- **100** por filhote entregue + **50** por adicional da mesma viagem
-  (3 juntos = 400) — fórmula existente preservada.
-- **100** por inimigo atingido por objeto (uma vez por acerto).
-- **Bônus de tempo** ao concluir a fase: `max(0, 120 − floor(segundos)) × 10`.
-- Pontuação e vidas **acumulam entre fases**; fase só termina com todos os
-  filhotes entregues (`Resgatados: X/N` dinâmico).
-- Recorde salvo em `localStorage` (`flicky.recorde`) a cada aumento, com
-  fallback para quando o armazenamento está indisponível.
+**Tarefas**
+- [x] Viewport: manter `width=device-width, initial-scale=1, viewport-fit=cover` e **remover** `maximum-scale/user-scalable=no` (zoom global liberado).
+- [x] Nova estrutura: `#hud` → `#mid` (grade com `#stage` + `.pad-left` + `.pad-right`) → `#hint`. Controles **fora da arena**.
+- [x] **Retrato**: grade `"stage stage" / "padl padr"` → informações no topo, arena no centro, controles abaixo, cantos dos polegares.
+- [x] **Paisagem**: grade `"padl stage padr"` → usa a largura, controles em trilhas laterais reservadas.
+- [x] Arena com proporção 16/9 preservada (`aspect-ratio` + largura `min(…)` em unidades de contêiner `cqw/cqh`, com `@supports` de fallback) — **sem esticar nem cortar**, fase inteira visível.
+- [x] Largura de referência 360px CSS: tudo dimensionado em `clamp()/vw/vh` validados para 360×640.
+- [x] `env(safe-area-inset-*)` em HUD, palco e controles (notch/barra de gestos).
+- [x] Altura com barra do navegador: `100dvh` (com suporte `dvh`) + listener de `visualViewport.resize` → recalcula sem reiniciar a partida.
+- [x] Girar o aparelho: `resize`/`orientationchange` apenas redimensionam o canvas — **nenhum estado do jogo muda** (fase, pontos, vidas, posições intactos).
+- [x] `touch-action: none` no canvas e nos botões de ação; painel de instruções com `manipulation` (pinch-zoom liberado); sem seleção de texto, arraste de imagem e menu de toque prolongado no jogo.
 
-**Critério de conclusão (etapa 6):** entrega 400+400=800, acerto +100, bônus
-calculado em segundos inteiros, pontuação/vidas preservadas na troca de fase.
-
----
-
-## 7. Interface e telas de conclusão e vitória
-
-- HUD: `Pontos` (acumulado), `Recorde`, `Fase N/10`, `Vidas` (ícones),
-  `Resgatados: X/N` e som ligado/desligado — tudo em pt-BR, atualizado por fase.
-- Menu inicial com título, instruções e botão **Jogar** (overlay sobre a fase 1).
-- Pausa: `Esc`/`P` → "Continuar" + "Reiniciar campanha".
-- **Fase concluída** (1–9): título "Fase N concluída!", pontos da fase, bônus de
-  tempo e pontuação acumulada + botão **Próxima fase**.
-- **Vitória** só após a fase 10: resumo da fase 10 + total + recorde +
-  **Jogar novamente**.
-- **Game Over**: total + botão **Nova campanha** (volta à fase 1 com 3 vidas).
-- Efeitos: partículas discretas na entrega, acerto, dispersão e conclusão;
-  sons de salto, coleta, entrega, arremesso, ataque, dano e transição;
-  botão de mudo; áudio só após interação; pixels nítidos ao redimensionar.
-
-**Critério de conclusão (etapa 7):** as 6 telas (menu, jogo, pausa, conclusão,
-game over, vitória) funcionam com textos em pt-BR e números corretos.
+**Critério de conclusão**
+- Em 360×640 e 390×844 (retrato) e 844×390 (paisagem): HUD legível, arena inteira visível e sem distorção, botões ≥48px fora da arena, nada cortado (verificação estática de CSS + inspeção; aparelho real na seção 7).
 
 ---
 
-## 8. Controles e adaptação para mobile
+## 5. Tratamento de foco, pausa, rotação e áudio
 
-- Desktop: ←/→ ou A/D move; Espaço/W/↑ pula; **X/J lança**; **Esc/P pausa**; M som.
-  Perda de foco/aba → pausa + **limpeza dos comandos pressionados**.
-- Mobile: ◀ ▶ no canto inferior esquerdo; **▲ (salto) e ➤ (lançamento)** no
-  canto inferior direito, `pointer events` independentes (múltiplos toques
-  simultâneos), alvos ≥ 44 px com feedback visual.
-- `touch-action: none`, `user-select: none`, `overscroll-behavior: none`,
-  `preventDefault` nas teclas de rolagem → sem rolar/selecionar/zoom durante a partida.
-- Layout 16:9 sempre com a arena inteira visível em retrato e paisagem,
-  respeitando `env(safe-area-inset-*)`; HUD quebra linha em telas estreitas.
+**Tarefas**
+- [x] `blur` da janela, `visibilitychange` (aba oculta/troca de app) e `pagehide` → **pausar** e mostrar a tela de pausa; ao retornar aguardar “Continuar” (sem retomar sozinho).
+- [x] Ao pausar: `clearInput()` (teclado + toque + `.pressed`) → nenhum comando preso na volta.
+- [x] Rotação/orientação: só re-layout (`resizeCanvas`), partida intacta; **sem** bloqueio de orientação nem dependência de tela cheia.
+- [x] Áudio: `SFX.init()` somente após gesto do usuário (Jogar/botões/tecla); `SFX.suspend()` ao ocultar e `SFX.resume()` ao voltar; preferência `flicky.som` persistida em `localStorage`; `play()` com `try/catch` — falha de áudio nunca impede a partida.
+- [x] Botão de tela cheia só aparece se `requestFullscreen` existir (detecção de recurso; jogo funciona sem ela).
 
-**Critério de conclusão (etapa 8):** mover+pular+lançar ao mesmo tempo no toque;
-nenhuma informação importante coberta pelos botões.
+**Critério de conclusão**
+- Teste headless: ocultar aba → estado `pause` + overlay Pausa visível; voltar → continua pausado até clicar “Continuar”; `SFX.suspend/resume` não lançam erro sem `AudioContext`; toggle de som grava `flicky.som`.
 
 ---
 
-## 9. Validação, correções e documentação
+## 6. Ajustes de renderização e desempenho
 
-- `node --check` em todos os arquivos JS.
-- `node tests/headless.js` — suíte atualizada cobrindo:
-  menu/inicialização, física e laço, fila por histórico, dispersão, entrega e
-  pontuação, bônus de tempo, transição de fase preservando pontos/vidas,
-  **progressão automática 1 → 10** (contagens da tabela + BFS por fase),
-  arremesso/atordoamento/+100, vitória **somente** na fase 10, game over →
-  nova campanha, recorde (`localStorage`), pausa por Esc/P/foco limpando comandos.
-- `node tests/render.js` — PNGs de inspeção por tema (fases 1, 4, 8, 10) + zooms.
-- `README.md` — execução, controles, descrição da campanha, fases e testes.
+**Tarefas**
+- [x] `resizeCanvas()`: tamanho de exibição via `getBoundingClientRect()` × `devicePixelRatio` **limitado por `DPR_CAP` (2, constante configurável)**; backbuffer só muda quando o cálculo muda (sem trabalho por quadro).
+- [x] Escala aplicada com `ctx.setTransform(backing/480, …)` (com guarda `typeof` para o rasterizador dos testes) + `imageSmoothingEnabled = false` reafirmado **a cada resize e a cada quadro** (estado do contexto zera em resize).
+- [x] `render()` imediatamente após redimensionar → a cena nunca fica permanentemente apagada e **nenhum estado de partida é tocado**.
+- [x] Um único laço rAF (`booted`), um único conjunto de listeners, listeners extras (`resize`, `orientationchange`, `visualViewport`, `pagehide`) com guarda de reexecução.
+- [x] Intervalos longos contidos: clamp de `dt` (0,25s), limite de 40 passos por quadro, `last/acc` zerados no retomar; pausa impede acúmulo ao voltar de interrupção.
+- [x] Sem mudanças em `SPEED`, `GRAV`, `JUMP_V`, `STEP` nem na lógica das fases — mesma velocidade e mesmo comportamento.
+- [x] Alocações por quadro mantidas baixas (cenário em cache, sem criação de objetos novos no `render()`).
 
-**Critério de conclusão (etapa 9):** todos os testes passam, screenshots conferidos
-e README atualizado. Limitações reais registradas no relatório final.
+**Critério de conclusão**
+- Teste: `Flicky.resize()` com `devicePixelRatio = 3` → backbuffer ≤ `480 × DPR_CAP` (teto respeitado); estado (fase/pontos/vidas/posição) idêntico antes e depois; suíte completa verde.
+
+---
+
+## 7. Validação e atualização da documentação
+
+**Tarefas**
+- [x] `node --check` em todos os JS.
+- [x] `tests/headless.js`: manter as 357 asserções da campanha e **adicionar** seções mobile:
+  andar+saltar e andar+arremessar simultâneos por toque; `pointerup`/`pointercancel` interrompendo;
+  origem dupla teclado+toque; `clearInput` em pausa/fase; botão de pausa; pausa ao ocultar a aba
+  com retorno aguardando “Continuar”; resize/rotação preservando a partida; teto de DPR;
+  persistência do som; textos do menu com instruções de toque.
+- [x] `tests/render.js`: continua gerando frames (inclui verificação de que o resize não apaga a cena).
+- [x] `README.md`: controles mobile (tabela), instruções de abrir pelo celular e **servidor na rede local** (mesmo Wi‑Fi, IP local, porta, aviso de firewall/HTTPS).
+- [x] Relatório final: arquivos alterados, como executar/acessar pelo celular, verificações feitas × pendentes em aparelho real.
+
+**Critério de conclusão**
+- `node tests/headless.js` → 0 falhas; `node tests/render.js` → frames gerados; README com seção mobile.
+- **Pendente em aparelho real (não automatizável aqui):** toque multi-dedo real, fluidez em aparelho (iPhone 13/Android), comportamento da barra do Safari, notch/áreas seguras, gyro/orientação e áudio real.

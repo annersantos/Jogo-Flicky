@@ -38,7 +38,23 @@
   var invuln = 0, gameTime = 0, safeIdx = 0;
   var last = 0, acc = 0, started = false, booted = false;
 
-  var input = { left: false, right: false, jump: false, jumpQueued: false, throwQueued: false };
+  var input = {
+    left: false, right: false, jump: false, throw: false,
+    jumpQueued: false, throwQueued: false
+  };
+
+  /* entrada unificada: cada ação guarda as origens (teclado + ponteiro);
+     o valor final é a união — soltar uma origem não apaga a outra */
+  var SRC_NAMES = ['left', 'right', 'jump', 'throw'];
+  var src = {};
+  for (var si = 0; si < SRC_NAMES.length; si++) {
+    src[SRC_NAMES[si]] = { kbd: false, ptr: false };
+  }
+  /* acompanhamento individual de toques: ponteiro -> ação, por ação -> conjunto */
+  var ptrAction = {};
+  var ptrSet = { left: {}, right: {}, jump: {}, throw: {} };
+  var ptrN = { left: 0, right: 0, jump: 0, throw: 0 };
+  var touchBtns = [];            // botões com estado visual .pressed
 
   /* referências de UI */
   var el = {};
@@ -104,8 +120,50 @@
 
   function clearInput() {
     input.left = false; input.right = false;
-    input.jump = false; input.jumpQueued = false;
-    input.throwQueued = false;
+    input.jump = false; input.throw = false;
+    input.jumpQueued = false; input.throwQueued = false;
+    for (var i = 0; i < SRC_NAMES.length; i++) {
+      var a = SRC_NAMES[i];
+      src[a].kbd = false; src[a].ptr = false;
+      ptrSet[a] = {}; ptrN[a] = 0;
+    }
+    ptrAction = {};
+    for (var b = 0; b < touchBtns.length; b++) {
+      var n = touchBtns[b];
+      if (n && n.classList) n.classList.remove('pressed');
+    }
+  }
+
+  /* define uma ação vinda de uma origem; a borda false→true dispara o evento */
+  function setAction(name, on, origin) {
+    var s = src[name];
+    if (!s || s[origin] === on) return;
+    s[origin] = on;
+    var val = s.kbd || s.ptr;
+    if (name === 'jump') {
+      if (val && !input.jump && state === 'play') input.jumpQueued = true;
+      input.jump = val;
+    } else if (name === 'throw') {
+      if (val && !input.throw && state === 'play') input.throwQueued = true;
+      input.throw = val;
+    } else {
+      input[name] = val;
+    }
+  }
+
+  /* ---- ponteiros (toque): um dedo por ação, com captura ---- */
+  function ptrDown(action, id) {
+    var set = ptrSet[action];
+    if (set[id]) return false;
+    set[id] = 1; ptrN[action]++;
+    return true;
+  }
+  function ptrUp(action, id) {
+    var set = ptrSet[action];
+    if (!set[id]) return false;
+    delete set[id];
+    ptrN[action] = ptrN[action] > 0 ? ptrN[action] - 1 : 0;
+    return true;
   }
 
   /* ---------------- recorde (localStorage) ---------------- */
@@ -258,8 +316,9 @@
     }
   }
 
-  /* ---------------- entrada ---------------- */
-  function isMoveKey(k) { return k === 'ArrowLeft' || k === 'ArrowRight' || k === 'a' || k === 'd' || k === 'A' || k === 'D'; }
+  /* ---------------- entrada (teclado + toque na mesma camada de ações) ---------------- */
+  function isLeftKey(k) { return k === 'ArrowLeft' || k === 'a' || k === 'A'; }
+  function isRightKey(k) { return k === 'ArrowRight' || k === 'd' || k === 'D'; }
   function isJumpKey(k) { return k === ' ' || k === 'Spacebar' || k === 'w' || k === 'W' || k === 'ArrowUp'; }
   function isThrowKey(k) { return k === 'x' || k === 'X' || k === 'j' || k === 'J'; }
   function isPauseKey(k) { return k === 'Escape' || k === 'p' || k === 'P'; }
@@ -274,52 +333,71 @@
         startCampaign();
         return;
       }
-      if (isMoveKey(k)) {
-        if (k === 'ArrowLeft' || k === 'a' || k === 'A') input.left = true;
-        else input.right = true;
-        e.preventDefault();
-        SFX.init();
+      if (isPauseKey(k)) { e.preventDefault(); SFX.init(); togglePause(); return; }
+      if (k === 'm' || k === 'M') { toggleMute(); return; }
+      // fora do jogo nenhuma ação é registrada (nada fica "pendurado")
+      if (state !== 'play') return;
+      if (isLeftKey(k)) {
+        setAction('left', true, 'kbd');
+        e.preventDefault(); SFX.init();
+      } else if (isRightKey(k)) {
+        setAction('right', true, 'kbd');
+        e.preventDefault(); SFX.init();
+      } else if (isJumpKey(k)) {
+        setAction('jump', true, 'kbd');
+        e.preventDefault(); SFX.init();
+      } else if (isThrowKey(k)) {
+        setAction('throw', true, 'kbd');
+        e.preventDefault(); SFX.init();
       }
-      if (isJumpKey(k)) {
-        if (!input.jump) input.jumpQueued = true;
-        input.jump = true;
-        e.preventDefault();
-        SFX.init();
-      }
-      if (isThrowKey(k)) {
-        if (!e.repeat && state === 'play') input.throwQueued = true;
-        e.preventDefault();
-        SFX.init();
-      }
-      if (isPauseKey(k)) { e.preventDefault(); togglePause(); }
-      if (k === 'm' || k === 'M') toggleMute();
     });
     window.addEventListener('keyup', function (e) {
       var k = e.key;
-      if (k === 'ArrowLeft' || k === 'a' || k === 'A') input.left = false;
-      if (k === 'ArrowRight' || k === 'd' || k === 'D') input.right = false;
-      if (isJumpKey(k)) input.jump = false;
+      if (isLeftKey(k)) setAction('left', false, 'kbd');
+      else if (isRightKey(k)) setAction('right', false, 'kbd');
+      else if (isJumpKey(k)) setAction('jump', false, 'kbd');
+      else if (isThrowKey(k)) setAction('throw', false, 'kbd');
     });
     // gestos iniciais liberam o áudio
     ['pointerdown', 'touchstart', 'keydown'].forEach(function (ev) {
       window.addEventListener(ev, function () { SFX.init(); }, { once: true });
     });
     window.addEventListener('contextmenu', function (e) {
-      if (e.target && e.target.closest && e.target.closest('#stage')) e.preventDefault();
+      var t = e.target;
+      if (t && t.closest && t.closest('#stage, #touch, #hud')) e.preventDefault();
     });
   }
 
-  function bindHold(id, prop) {
+  /* botão de toque: pressão contínua, captura de ponteiro, múltiplos dedos */
+  function bindTouch(id, action) {
     var node = document.getElementById(id);
     if (!node || !node.addEventListener) return;
+    touchBtns.push(node);
+
     function down(e) {
-      e.preventDefault();
+      if (e && e.preventDefault) e.preventDefault();
       SFX.init();
-      try { node.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
-      input[prop] = true;
-      if (prop === 'jump') input.jumpQueued = true;
+      if (state !== 'play') return;               // só age durante a partida
+      var pid = (e && e.pointerId != null) ? e.pointerId : 'm';
+      if (ptrAction[pid]) return;                 // este dedo já está em uso
+      if (!ptrDown(action, pid)) return;
+      ptrAction[pid] = action;
+      try { if (node.setPointerCapture) node.setPointerCapture(pid); } catch (err) { /* noop */ }
+      if (node.classList) node.classList.add('pressed');
+      setAction(action, true, 'ptr');
     }
-    function up(e) { e.preventDefault(); input[prop] = false; }
+    function up(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      var pid = (e && e.pointerId != null) ? e.pointerId : 'm';
+      var act = ptrAction[pid];
+      if (!act) return;                          // toque já liberado/limpo
+      delete ptrAction[pid];
+      ptrUp(act, pid);
+      if (ptrN[act] === 0) {                     // último dedo deste botão
+        setAction(act, false, 'ptr');
+        if (node.classList) node.classList.remove('pressed');
+      }
+    }
     node.addEventListener('pointerdown', down);
     node.addEventListener('pointerup', up);
     node.addEventListener('pointercancel', up);
@@ -327,21 +405,10 @@
   }
 
   function setupTouch() {
-    bindHold('btnLeft', 'left');
-    bindHold('btnRight', 'right');
-    bindHold('btnJump', 'jump');
-    var b = document.getElementById('btnThrow');
-    if (b && b.addEventListener) {
-      b.addEventListener('pointerdown', function (e) {
-        e.preventDefault();
-        SFX.init();
-        try { b.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
-        if (state === 'play') input.throwQueued = true;
-      });
-      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (ev) {
-        b.addEventListener(ev, function (e) { e.preventDefault(); });
-      });
-    }
+    bindTouch('btnLeft', 'left');
+    bindTouch('btnRight', 'right');
+    bindTouch('btnJump', 'jump');
+    bindTouch('btnThrow', 'throw');
   }
 
   /* ---------------- física do jogador ---------------- */
@@ -688,6 +755,7 @@
 
   function render() {
     if (!ctx || !scenery) return;
+    ctx.imageSmoothingEnabled = false;      // redimensionamento zera o contexto
     ctx.drawImage(scenery, 0, 0);
     drawDoorGlow();
 
@@ -748,6 +816,126 @@
     ctx.globalAlpha = 1;
   }
 
+  /* ---------------- dimensionamento do canvas (devicePixelRatio com teto) ---------------- */
+  var DPR_CAP = 2;                       // limite configurável de nitidez/custo
+  var resizePending = false;
+
+  /* Redimensiona o backbuffer mantendo a resolução lógica 480×270 intacta.
+     Só mexe no canvas — nenhum estado da partida é alterado. */
+  function resizeCanvas() {
+    if (!canvas || !ctx) return;
+    var dpr = 1;
+    try { dpr = window.devicePixelRatio || 1; } catch (e) { dpr = 1; }
+    if (!(dpr > 0)) dpr = 1;
+    if (dpr > DPR_CAP) dpr = DPR_CAP;
+    var w = LEVEL.W, h = LEVEL.H;
+    try {
+      if (canvas.getBoundingClientRect) {
+        var r = canvas.getBoundingClientRect();
+        if (r && r.width > 4 && r.height > 4) { w = r.width; h = r.height; }
+      }
+    } catch (e) { /* sem medida de layout (testes) → mantém 480×270 */ }
+    var bw = Math.max(1, Math.round(w * dpr));
+    var bh = Math.max(1, Math.round(h * dpr));
+    if (canvas.width !== bw) canvas.width = bw;
+    if (canvas.height !== bh) canvas.height = bh;
+    // escala do mundo de jogo (480×270) para o backbuffer, sem suavização
+    if (typeof ctx.setTransform === 'function') {
+      ctx.setTransform(bw / LEVEL.W, 0, 0, bh / LEVEL.H, 0, 0);
+    }
+    ctx.imageSmoothingEnabled = false;
+    render();                            // cena redesenhada na hora (nunca some)
+  }
+
+  function scheduleResize() {
+    if (resizePending) return;
+    resizePending = true;
+    requestAnimationFrame(function () {
+      resizePending = false;
+      resizeCanvas();
+    });
+  }
+
+  /* ---------------- detecção de entrada por toque ---------------- */
+  function isTouchDevice() {
+    try {
+      if (window.navigator && window.navigator.maxTouchPoints > 0) return true;
+      if (window.matchMedia && window.matchMedia('(hover: none), (pointer: coarse)').matches) return true;
+    } catch (e) { /* sem detecção */ }
+    return false;
+  }
+
+  function controlsText() {
+    if (isTouchDevice()) {
+      return 'Colete os filhotes e leve-os à porta para resgatá-los.\n' +
+        'Toque em ◀ ▶ para mover · ▲ pular · ➤ lançar\n' +
+        'Combine os botões com dois dedos · ⏸ pausa · □ som\n' +
+        '10 fases · 3 vidas · cuidado com os gatos!\n' +
+        'Recorde: ' + record;
+    }
+    return 'Colete os filhotes e leve-os à porta para resgatá-los.\n' +
+      'Setas ou A/D: mover · Espaço/W/↑: pular\n' +
+      'X ou J: lançar objeto · Esc ou P: pausa · M: som\n' +
+      '10 fases · 3 vidas · cuidado com os gatos!\n' +
+      'Recorde: ' + record;
+  }
+
+  function pauseText() {
+    var head = 'Fase ' + phase + '/' + LEVELS.total + ' · Pontos: ' + score + '\n';
+    return head + (isTouchDevice()
+      ? 'Toque em "Continuar" para voltar à partida.'
+      : 'Pressione Esc, P ou o botão para continuar.');
+  }
+
+  function hintText() {
+    if (isTouchDevice()) {
+      return 'Toque: ◀ ▶ mover · ▲ pular · ➤ lançar · ⏸ pausa · □ som';
+    }
+    return 'Setas ou A/D: mover · Espaço, W ou ↑: pular · X ou J: arremessar' +
+      ' · Esc ou P: pausa · M: som';
+  }
+
+  /* reaplica textos sensíveis ao tipo de dispositivo (usado no boot e pelos testes) */
+  function refreshUI() {
+    if (el.hint) el.hint.textContent = hintText();
+    if (state === 'menu') showOverlay('menu');
+    else if (state === 'pause') showOverlay('pause');
+  }
+
+  /* ---------------- tela cheia (recurso opcional, com detecção) ---------------- */
+  function setupFullscreen() {
+    var docEl = document.documentElement;
+    var supported = !!(docEl && docEl.requestFullscreen && document.exitFullscreen);
+    if (supported && el.full) el.full.classList.remove('hidden');
+  }
+
+  function toggleFullscreen() {
+    try {
+      var p = null;
+      if (document.fullscreenElement) {
+        if (document.exitFullscreen) p = document.exitFullscreen();
+      } else if (document.documentElement && document.documentElement.requestFullscreen) {
+        p = document.documentElement.requestFullscreen();
+      }
+      if (p && typeof p.catch === 'function') p.catch(function () { /* não permitido */ });
+    } catch (e) { /* API indisponível: o jogo segue funcionando */ }
+  }
+
+  /* ---------------- preferência de som (localStorage) ---------------- */
+  function loadMutePref() {
+    try {
+      var v = global2().localStorage && global2().localStorage.getItem('flicky.som');
+      if (v === '0') SFX.setEnabled(false);
+      else SFX.setEnabled(true);
+    } catch (e) { /* sem armazenamento */ }
+  }
+  function saveMutePref() {
+    try {
+      var ls = global2().localStorage;
+      if (ls && ls.setItem) ls.setItem('flicky.som', SFX.isEnabled() ? '1' : '0');
+    } catch (e) { /* sem armazenamento */ }
+  }
+
   /* ---------------- interface ---------------- */
   function updateHUD() {
     if (el.score) el.score.textContent = 'Pontos: ' + score;
@@ -780,7 +968,16 @@
 
   function toggleMute() {
     SFX.setEnabled(!SFX.isEnabled());
+    saveMutePref();
     updateMuteIcon();
+  }
+
+  function updatePauseBtn() {
+    if (!el.pause) return;
+    var playing = state === 'play';
+    var label = playing ? 'Pausar' : 'Continuar';
+    if (el.pause.setAttribute) el.pause.setAttribute('aria-label', label);
+    el.pause.title = label;
   }
 
   var overlayKind = null;
@@ -793,17 +990,11 @@
     el.ovBtn2.classList.add('hidden');
     if (kind === 'menu') {
       el.ovTitle.textContent = 'Flicky do Jardim';
-      el.ovText.textContent =
-        'Colete os filhotes e leve-os à porta para resgatá-los.\n' +
-        'Setas ou A/D: mover · Espaço/W/↑: pular\n' +
-        'X ou J: lançar objeto · Esc ou P: pausa · M: som\n' +
-        '10 fases · 3 vidas · cuidado com os gatos!\n' +
-        'Recorde: ' + record;
+      el.ovText.textContent = controlsText();
       el.ovBtn1.textContent = 'Jogar';
     } else if (kind === 'pause') {
       el.ovTitle.textContent = 'Pausa';
-      el.ovText.textContent = 'Fase ' + phase + '/' + LEVELS.total +
-        ' · Pontos: ' + score + '\nPressione Esc, P ou o botão para continuar.';
+      el.ovText.textContent = pauseText();
       el.ovBtn1.textContent = 'Continuar';
       el.ovBtn2.classList.remove('hidden');
       el.ovBtn2.textContent = 'Reiniciar campanha';
@@ -828,12 +1019,13 @@
         'Pontuação: ' + score + '\nRecorde: ' + record;
       el.ovBtn1.textContent = 'Nova campanha';
     }
+    updatePauseBtn();
   }
 
   function hideOverlay() {
     overlayKind = null;
-    if (!el.overlay) return;
-    el.overlay.classList.add('hidden');
+    if (el.overlay) el.overlay.classList.add('hidden');
+    updatePauseBtn();
   }
 
   function pauseGame() {
@@ -900,10 +1092,8 @@
     booted = true;
 
     canvas = document.getElementById('game');
-    ctx = canvas.getContext('2d');
+    ctx = canvas && canvas.getContext ? canvas.getContext('2d') : null;
     if (ctx) ctx.imageSmoothingEnabled = false;
-    canvas.width = LEVEL.W;
-    canvas.height = LEVEL.H;
 
     sprites = SPRITES.build();
     birdHurt = SPRITES.tint(sprites.bird.jump, '#ff5a5a', 0.5);
@@ -920,6 +1110,9 @@
       mute: document.getElementById('btnMute'),
       muteIcon: document.getElementById('muteIcon'),
       muteLabel: document.getElementById('muteLabel'),
+      pause: document.getElementById('btnPause'),
+      full: document.getElementById('btnFull'),
+      hint: document.getElementById('hint'),
       overlay: document.getElementById('overlay'),
       ovTitle: document.getElementById('ovTitle'),
       ovText: document.getElementById('ovText'),
@@ -932,6 +1125,11 @@
       ]
     };
 
+    // entrada por toque? → libera os botões e o layout de celular
+    if (isTouchDevice() && document.body && document.body.classList) {
+      document.body.classList.add('has-touch');
+    }
+
     var url = sprites.icons.bird.toDataURL ? sprites.icons.bird.toDataURL() : '';
     if (url) {
       for (var i = 0; i < el.lives.length; i++) {
@@ -940,23 +1138,47 @@
     }
 
     record = loadRecord();
+    loadMutePref();
     setupInput();
     setupTouch();
     bindButton('btnMute', toggleMute);
+    bindButton('btnPause', togglePause);
+    bindButton('btnFull', toggleFullscreen);
     bindButton('ovBtn1', primaryAction);
     bindButton('ovBtn2', secondaryAction);
+    setupFullscreen();
 
-    window.addEventListener('blur', function () {
+    // perda de foco / aba oculta / saída da página → pausa + limpa comandos
+    function pauseFromOutside() {
       if (state === 'play') pauseGame(); else clearInput();
-    });
+      last = 0; acc = 0;
+    }
+    window.addEventListener('blur', pauseFromOutside);
+    window.addEventListener('pagehide', pauseFromOutside);
     document.addEventListener('visibilitychange', function () {
-      if (document.hidden) { if (state === 'play') pauseGame(); else clearInput(); }
+      if (document.hidden) {
+        pauseFromOutside();
+        SFX.suspend();                 // áudio pausado junto com a aba
+      } else {
+        SFX.resume();                  // retoma quando o usuário voltar
+        last = 0; acc = 0;             // evita salto de tempo ao retornar
+      }
     });
 
+    // redimensionar/girar o aparelho recalcula só a escala de exibição
+    window.addEventListener('resize', scheduleResize);
+    window.addEventListener('orientationchange', scheduleResize);
+    if (window.visualViewport && window.visualViewport.addEventListener) {
+      window.visualViewport.addEventListener('resize', scheduleResize);
+    }
+
+    resizeCanvas();                    // backbuffer devicePixelRatio (teto DPR_CAP)
     loadPhase(1);
     state = 'menu';
     showOverlay('menu');
+    refreshUI();                       // dica conforme teclado ou toque
     updateMuteIcon();
+    updatePauseBtn();
     started = true;
     requestAnimationFrame(loop);
   }
@@ -1009,6 +1231,9 @@
     loadPhase: function (n) { startPhase(n); },     // carrega fase (testes)
     nextPhase: nextPhase,
     throwNow: function () { doThrow(); },
+    resize: resizeCanvas,                           // redimensiona sem tocar no estado
+    refreshUI: refreshUI,                           // reaplica textos/toque-ou-teclado
+    isTouch: isTouchDevice,
     input: input
   };
 })();

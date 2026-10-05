@@ -2,15 +2,16 @@
 
 Jogo de plataforma 2D em tela fixa, inspirado em *Flicky*: você controla um
 passarinho que coleta os filhotes espalhados pelas plataformas, forma a fila e
-leva-os até a porta no chão — enquanto evita os gatos de patrulha. Agora com
-**campanha completa de 10 fases**, objetos arremessáveis, pontuação acumulada,
-bônus de tempo e recorde salvo no navegador.
+leva-os até a porta no chão — enquanto evita os gatos de patrulha. Campanha
+completa de **10 fases**, objetos arremessáveis, pontuação acumulada, bônus de
+tempo e recorde salvo no navegador.
 
 Feito com **HTML5 + CSS + JavaScript puros** (Canvas 2D), sem bibliotecas e
 **sem arquivos de asset externos**: as sprites são desenhadas por código e os
-sons são sintetizados com a Web Audio API.
+sons são sintetizados com a Web Audio API. Funciona em **computador e celular**
+(página estática, sem instalação de aplicativo).
 
-## Como rodar
+## Como rodar (computador)
 
 O jogo precisa ser servido por um servidor HTTP local (por causa do carregamento
 dos arquivos `js/*.js` via `<script>`).
@@ -48,24 +49,62 @@ direito em `index.html` → *Open with Live Server*.
 > Abrir o `index.html` direto com `file://` também funciona na maioria dos
 > navegadores, mas o servidor local é o modo recomendado.
 
+## Como jogar no celular (Wi‑Fi local)
+
+1. **Suba o servidor no computador** ligado à mesma rede Wi‑Fi do celular:
+
+   ```bash
+   cd jogo-flicky
+   python -m http.server 8000
+   ```
+
+   O `python -m http.server` já aceita conexões de fora por padrão.
+
+2. **Descubra o IP do computador:**
+   - Windows: `ipconfig` → IPv4 do adaptador Wi‑Fi (ex.: `192.168.0.15`)
+   - macOS/Linux: `ip addr` ou `ifconfig` (ex.: `192.168.0.15`)
+
+3. **No celular**, abra no navegador (mesma rede Wi‑Fi):
+
+   ```
+   http://192.168.0.15:8000
+   ```
+
+Observações:
+
+- Se aparecer bloqueio, **libere a porta 8000** na firewall do computador
+  (firewall pede permissão na primeira execução — permita na rede privada).
+- O acesso é **HTTP na rede local** — não é preciso HTTPS nem internet.
+- Para usar o Node: `npx http-server -p 8000 -a 0.0.0.0 .`
+- Testado-alvo de layout: **iPhone 13** (Safari) e Android (Chrome), em
+  retrato e paisagem.
+
 ## Controles
 
 | Ação | Teclado | Toque (celular/tablet) |
 | --- | --- | --- |
-| Mover | ← → ou A / D | Botões ◀ ▶ (canto inferior esquerdo) |
-| Pular | Espaço, W ou ↑ | Botão ▲ (canto inferior direito) |
-| Arremessar objeto | X ou J | Botão ➤ (canto inferior direito, laranja) |
-| Pausar / retomar | Esc ou P | — |
-| Ligar/desligar som | M | Botão de som no HUD |
+| Mover | ← → ou A / D | Botões ◀ ▶ (esquerda, polegar esquerdo) |
+| Pular | Espaço, W ou ↑ | Botão ▲ (direita, polegar direito) |
+| Arremessar objeto | X ou J | Botão ➤ laranja (direita, polegar direito) |
+| Pausar / retomar | Esc ou P | Botão ⏸ no HUD (ou "Continuar") |
+| Ligar/desligar som | M | Botão de som no HUD (ícone) |
+| Tela cheia | — | Botão ⛶ no HUD (só se o navegador suportar) |
 | Iniciar (menu) | Enter ou Espaço | Botão **Jogar** |
 
-- O salto é de altura variável: segure a tecla para pular mais alto.
-- No toque, é possível mover, pular e lançar ao mesmo tempo (os botões são
-  independentes, com múltiplos toques simultâneos). A página não rola, não
-  seleciona texto e não dá zoom durante a partida.
-- Perder o foco da janela/aba pausa o jogo e **limpa os comandos pressionados**.
-- O layout é responsivo em retrato e paisagem: a arena inteira (480×270, 16:9)
-  fica sempre visível, respeitando as áreas seguras da tela.
+- **Multitoque:** cada botão acompanha o próprio dedo — dá para andar + pular
+  ou andar + arremessar ao mesmo tempo; soltar ou cancelar o toque encerra
+  exatamente aquele comando.
+- No teclado, soltar uma tecla mantém a ação enquanto outro dispositivo
+  (toque) ainda estiver pressionando — entrada unificada por ações.
+- No toque, a movimentação continua enquanto o botão estiver pressionado.
+- Perder o foco da janela/aba, trocar de aplicativo ou pausar **limpa todos os
+  comandos** (nada fica "pendurado" ao voltar).
+- O layout é responsivo em **retrato** (HUD no topo, arena no centro,
+  controles abaixo — nunca cobrindo a arena) e **paisagem** (controles nas
+  trilhas laterais), respeitando notch e barra de gestos
+  (`env(safe-area-inset-*)`), sem travar a orientação nem exigir tela cheia.
+- **Girar o celular recalcula o layout sem reiniciar a partida** (fase, pontos,
+  vidas e posições permanecem).
 
 ## Regras
 
@@ -92,14 +131,20 @@ direito em `index.html` → *Open with Live Server*.
 - **Bônus de tempo:** ao concluir cada fase, ganhe
   `max(0, 120 − segundos_inteiros) × 10` pontos.
 - **Recorde:** salvo no `localStorage` e exibido no HUD e nas telas finais.
+  A preferência de som também é persistida (`flicky.som`).
 - **Telas:** menu inicial, pausa, "Fase concluída" (com botão **Próxima fase**
   nas fases 1–9), Game Over (com **Nova campanha**) e **Vitória** — que só
   aparece após concluir a **fase 10**, com pontuação total, recorde e
   **Jogar novamente**.
-- **Pausa:** Esc, P ou ao perder o foco da janela/aba (física, inimigos e
-  cronômetro congelam).
-- A física usa **passo de tempo fixo** (120 Hz), independente da taxa de quadros
-  da tela.
+- **Pausa:** Esc, P, botão ⏸ ou ao perder o foco/trocar de aplicativo (física,
+  inimigos e cronômetro congelam; ao voltar a tela de pausa aguarda você).
+- A física usa **passo de tempo fixo** (120 Hz) independente da taxa de quadros,
+  com um único laço `requestAnimationFrame` e limites de tempo após
+  interrupções — mesma velocidade dos personagens em qualquer aparelho.
+- O Canvas usa `devicePixelRatio` com **teto configurável** (`DPR_CAP = 2` em
+  `js/game.js`) e suavização desligada — pixel art nítida sem gastar demais.
+- O áudio só começa após a primeira interação e é **suspenso/retomado** ao
+  trocar de aplicativo; falha de áudio nunca interrompe a partida.
 
 ## A campanha
 
@@ -123,31 +168,29 @@ Todas as plataformas, filhotes e a porta são alcançáveis com a física real
 - **Dificuldade progressiva:** a velocidade dos gatos cresce por fase
   (multiplicador 1,0 → 1,3, com limite que preserva o tempo de reação) e a
   distância de perseguição também aumenta gradualmente.
-- **Cenários:** 10 temas com céu, chão, plataformas, porta e decoração próprios
-  (jardim, vila, bosque, telhados ao pôr do sol, parque no crepúsculo,
-  armazém, fábrica, cidade noturna, torre e jardim festivo), todos gerados por
-  código e pré-renderizados com cache.
+- **Cenários:** 10 temas com céu, chão, plataformas, porta e decoração próprios,
+  todos gerados por código e pré-renderizados com cache.
 - **Efeitos e áudio:** partículas na entrega, acerto e conclusão de fase; sons
   de salto, coleta, entrega, arremesso, acerto, dano, respingo de gato e
-  transição de fase (botão de mudo no HUD; o áudio só começa após a primeira
-  interação).
+  transição de fase (botão de mudo no HUD).
 
 ## Estrutura
 
 ```
 jogo-flicky/
 ├── index.html            # Markup (HUD, canvas, controles de toque, overlays)
-├── style.css             # Layout responsivo e estética pixelada
+├── style.css             # Layout responsivo retrato/paisagem, áreas seguras, pixel art
 ├── js/
 │   ├── sprites.js        # Sprites geradas por código (passarinho, filhote, gato, noz, ícones)
-│   ├── audio.js          # Sons sintetizados (Web Audio) + botão de mudo
+│   ├── audio.js          # Sons sintetizados (Web Audio) + suspend/resume + mudo
 │   ├── levels.js         # DADOS das 10 fases (plataformas, filhotes, gatos, objetos, porta…)
 │   ├── level.js          # Carregador central de fases + cenários temáticos (cache)
-│   └── game.js           # Física, fila/histórico, gatos, arremesso, estados, HUD, loop
-├── PLANO_IMPLEMENTACAO.md# Plano de implementação da campanha (9 etapas)
+│   └── game.js           # Física, fila/histórico, gatos, arremesso, estados, HUD,
+│                         #   entrada unificada (teclado+toque), resize/DPR, laço rAF
+├── PLANO_IMPLEMENTACAO.md# Plano da adaptação mobile (7 etapas)
 ├── README.md             # Este arquivo
 └── tests/                # Testes (opcional, requer Node.js)
-    ├── headless.js       # Suíte headless (357 asserções)
+    ├── headless.js       # Suíte headless (420 asserções)
     ├── render.js         # Renderizador software → PNGs em tests/out/
     └── out/              # Frames de inspeção gerados
 ```
@@ -157,7 +200,7 @@ jogo-flicky/
 Os testes rodam no **Node.js** e não são necessários para jogar.
 
 ```bash
-# Regressão de lógica/física/regras (357 asserções)
+# Regressão de lógica/física/regras + mobile (420 asserções)
 node tests/headless.js
 
 # Gerar frames de inspeção em tests/out/*.png
@@ -170,13 +213,20 @@ perda de vida com invulnerabilidade e recuperação em pontos seguros,
 objetos arremessáveis (coleta, 1 por vez, +100 por acerto, atordoamento e
 ressurgimento do gato), entregas parciais (400+400), bônus de tempo,
 transição entre fases preservando pontos/vidas e limpando entidades,
-**progressão automática da fase 1 até a 10** com validação de cada layout
-(contagens da tabela, alcance por BFS, superfícies válidas), vitória somente
-após a fase 10, Game Over, nova campanha, recorde no `localStorage`,
-pausa por Esc/P/foco limpando comandos e controles de toque simultâneos.
+**progressão automática da fase 1 até a 10** com validação de cada layout,
+vitória somente após a fase 10, Game Over, nova campanha, recorde no
+`localStorage`, pausa por Esc/P/foco — e a camada mobile: **entrada unificada
+teclado+toque por origem, multitoque (andar+saltar, andar+arremessar),
+`pointerup`/`pointercancel` interrompendo comandos, pausa por botão, pausa ao
+ocultar a aba aguardando o jogador, resize/rotação preservando a partida, teto
+de `devicePixelRatio`, persistência do som, instruções adaptadas ao toque e
+verificações estáticas de marcação/estilo (controles fora da arena, viewport,
+áreas seguras, alvos 48px)**.
 
 ## Navegadores
 
-Testado em navegadores modernos com suporte a Canvas 2D e Web Audio
-(Chrome, Edge, Firefox, Safari). O áudio só começa após a primeira interação
-com o usuário (clique/tecla), conforme exigem os navegadores.
+Testado-alvo: **Safari no iPhone** e **Chrome no Android**, além de navegadores
+desktop modernos (Chrome, Edge, Firefox) — todos com Canvas 2D e Web Audio.
+O áudio só começa após a primeira interação (clique/toque/tecla), conforme
+exigem os navegadores. A tela cheia aparece somente quando a API existe, e o
+jogo funciona normalmente sem ela.

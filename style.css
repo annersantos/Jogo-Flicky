@@ -1,4 +1,10 @@
-/* Flicky do Jardim — layout responsivo e visual pixel art */
+/* Flicky do Jardim — layout responsivo (desktop + celular) e visual pixel art
+
+   Estrutura: #hud (informações) → #mid (arena + controles) → #hint
+   - Retato:  HUD no topo, arena no centro, controles ABAIXO (fora da arena)
+   - Paisagem: controles em TRILHAS LATERAIS reservadas (polegares)
+   - Resolução lógica do jogo: 480×270 (nunca distorcida — aspect-ratio 16/9)
+   - Áreas seguras (notch / barra de gestos) via env(safe-area-inset-*)          */
 :root {
   --bg: #101a2e;
   --panel: #1b2a47;
@@ -6,49 +12,57 @@
   --accent: #ffd34d;
   --text: #eaf2ff;
   --dim: #8fa6c4;
+  --gap: 0px;      /* espaçamento do grid da arena (8px quando há controles) */
+  --btn: 60px;     /* tamanho dos botões de toque (calibrado por orientação) */
 }
 
 * { box-sizing: border-box; }
 
-html, body {
+html {
   height: 100%;
-  margin: 0;
-  padding: 0;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 20%, #1c2c4d 0%, #101a2e 70%);
-  color: var(--text);
-  font-family: "Courier New", ui-monospace, monospace;
-  font-weight: bold;
-  touch-action: none;
-  overscroll-behavior: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-tap-highlight-color: transparent;
 }
 
 body {
+  height: 100%;
+  margin: 0;
+  padding: 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 20%, #1c2c4d 0%, #101a2e 70%);
+  color: var(--text);
+  font-family: "Courier New", ui-monospace, monospace;
+  font-weight: bold;
+  overscroll-behavior: none;          /* sem puxar-para-atualizar */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@supports (height: 100dvh) {
+  body { height: 100dvh; }            /* acompanha a barra do navegador */
 }
 
 .hidden { display: none !important; }
 
-/* ---------------- HUD ---------------- */
+/* ---------------- HUD (painel de informações) ---------------- */
 #hud {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
-  width: min(96vw, calc((100vh - 108px) * 16 / 9));
+  width: max-content;
+  max-width: 100%;
   padding: 5px 7px;
   background: var(--panel);
   border: 3px solid var(--ink);
   box-shadow: 0 3px 0 var(--ink);
-  font-size: clamp(10px, 2.1vw, 15px);
+  font-size: clamp(10px, 2.6vw, 15px);
   letter-spacing: 0.5px;
 }
 
@@ -66,13 +80,24 @@ body {
   width: clamp(16px, 3.4vw, 22px);
   height: clamp(16px, 3.4vw, 22px);
   image-rendering: pixelated;
+  pointer-events: none;
 }
 
-#btnMute {
-  margin-left: auto;
+.hud-actions {
   display: flex;
   align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* botões do HUD: pausa, tela cheia (opcional) e som */
+.hbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 5px;
+  min-width: 36px;
+  min-height: 36px;
   padding: 4px 7px;
   background: #0e1730;
   color: var(--text);
@@ -81,25 +106,48 @@ body {
   font: inherit;
   font-size: 0.92em;
   cursor: pointer;
+  touch-action: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
-#btnMute:hover { background: #16224a; }
-#btnMute:active { transform: translateY(2px); box-shadow: none; }
-#btnMute img {
+.hbtn:hover { background: #16224a; }
+.hbtn:active { transform: translateY(2px); box-shadow: none; }
+.hbtn img {
   width: clamp(14px, 3vw, 18px);
   height: clamp(14px, 3vw, 18px);
   image-rendering: pixelated;
+  pointer-events: none;
 }
 
-/* ---------------- palco do jogo ---------------- */
+/* ---------------- área central: arena + controles ---------------- */
+#mid {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: grid;
+  grid-template-areas:
+    "stage stage"
+    "padl  padr";
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: var(--gap);
+  align-content: center;
+  justify-items: center;
+  align-items: center;
+  container-type: size;               /* permite 100cqw/100cqh nos filhos */
+}
+
 #stage {
+  grid-area: stage;
+  justify-self: center;
   position: relative;
-  width: min(96vw, calc((100vh - 108px) * 16 / 9));
+  box-sizing: content-box;            /* proporção exata NO conteúdo (canvas) */
   aspect-ratio: 16 / 9;
+  width: min(calc(100% - 8px), calc((100vh - 96px) * 16 / 9));
   background: #6ec6ff;
   border: 4px solid var(--ink);
   box-shadow: 0 4px 0 var(--ink), 0 14px 34px rgba(0, 0, 0, 0.55);
   overflow: hidden;
-  touch-action: none;
 }
 
 #game {
@@ -108,40 +156,48 @@ body {
   height: 100%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
-  touch-action: none;
+  touch-action: none;                 /* gestos não interrompem a partida */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
-@supports (height: 100dvh) {
-  #hud, #stage { width: min(96vw, calc((100dvh - 108px) * 16 / 9)); }
+/* unidades de contêiner: encaixe exato entre HUD/controles e a arena */
+@supports (width: 1cqw) {
+  #stage { width: min(calc(100% - 8px), calc(100cqh * 16 / 9)); }
 }
 
-/* ---------------- controles mobile ---------------- */
+/* ---------------- controles de toque ---------------- */
 .touch-controls { display: none; }
+
 .pad {
-  position: absolute;
-  bottom: 5%;
   display: flex;
-  gap: 10px;
-  pointer-events: auto;
+  gap: var(--gap);
 }
-.pad-left { left: 3%; }
-.pad-right { right: 3%; }
+.pad-left  { grid-area: padl; justify-self: start; }
+.pad-right { grid-area: padr; justify-self: end; }
 
 .tbtn {
-  width: clamp(54px, 13vw, 86px);
-  height: clamp(54px, 13vw, 86px);
+  width: var(--btn);
+  height: var(--btn);
+  min-width: 48px;                    /* alvo de toque mínimo (Fitts) */
+  min-height: 48px;
   border-radius: 14px;
   border: 3px solid var(--ink);
   background: rgba(255, 255, 255, 0.26);
   color: #ffffff;
-  font-size: clamp(20px, 5vw, 34px);
+  font-size: calc(var(--btn) * 0.45);
   line-height: 1;
   cursor: pointer;
-  touch-action: none;
+  touch-action: none;                 /* sem gestos do navegador no botão */
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
   box-shadow: 0 3px 0 var(--ink);
 }
+/* resposta visual enquanto pressionado (funciona também via ponteiro capturado) */
+.tbtn.pressed,
 .tbtn:active {
   background: rgba(255, 211, 77, 0.85);
   color: #17223b;
@@ -149,20 +205,54 @@ body {
   box-shadow: none;
 }
 /* arremesso: cor distinta para diferenciar do salto (Von Restorff) */
-.tbtn-throw {
-  background: rgba(255, 159, 28, 0.42);
-}
+.tbtn-throw { background: rgba(255, 159, 28, 0.42); }
+.tbtn-throw.pressed,
 .tbtn-throw:active {
-  background: rgba(255, 211, 77, 0.9);
+  background: rgba(255, 159, 28, 0.95);
   color: #17223b;
 }
 
-@media (hover: none) and (pointer: coarse) {
-  .touch-controls { display: block; position: absolute; inset: 0; }
-  #hint { font-size: 10px; }
+/* ---------------- modo celular: controles visíveis e layout por orientação ---------------- */
+body.has-touch .touch-controls { display: contents; }
+
+/* interface por toque: alvos maiores e rótulo curto de som */
+body.has-touch .hbtn {
+  min-width: 48px;
+  min-height: 48px;
+}
+body.has-touch #muteLabel { display: none; }
+
+/* RETRATO: informações em cima, arena no meio, controles embaixo */
+body.has-touch { --btn: clamp(54px, 16vw, 74px); --gap: 8px; }
+body.has-touch #stage {
+  width: min(calc(100% - 8px), calc((100vh - var(--btn) - var(--gap) - 110px) * 16 / 9));
+}
+@supports (width: 1cqw) {
+  body.has-touch #stage {
+    width: min(calc(100% - 8px), calc((100cqh - var(--btn) - var(--gap)) * 16 / 9));
+  }
 }
 
-/* ---------------- overlays ---------------- */
+/* PAISAGEM: controles nas laterais reservadas (polegares inferiores) */
+@media (orientation: landscape) {
+  body.has-touch { --btn: clamp(48px, 9vh, 64px); }
+  body.has-touch #mid {
+    grid-template-areas: "padl stage padr";
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: 1fr;
+  }
+  body.has-touch .pad { flex-direction: column; align-self: end; }
+  body.has-touch #stage {
+    width: min(calc(100% - 8px), calc((100vh - 96px) * 16 / 9));
+  }
+  @supports (width: 1cqw) {
+    body.has-touch #stage {
+      width: min(calc(100% - 8px), calc(100cqh * 16 / 9));
+    }
+  }
+}
+
+/* ---------------- overlays (menu, pausa, conclusão, game over, vitória) ---------------- */
 #overlay {
   position: absolute;
   inset: 0;
@@ -180,6 +270,8 @@ body {
   padding: clamp(12px, 3vw, 26px) clamp(16px, 4vw, 34px);
   text-align: center;
   max-width: 84%;
+  touch-action: manipulation;         /* pinch-zoom liberado nas instruções */
+  overscroll-behavior: contain;
 }
 
 .panel h1 {
@@ -201,6 +293,8 @@ body {
 .panel-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
 .panel-buttons button {
+  min-height: 48px;                  /* alvo de toque confortável */
+  min-width: 48px;
   padding: 9px 16px;
   font: inherit;
   font-size: clamp(13px, 2.8vw, 17px);
@@ -209,20 +303,25 @@ body {
   border: 3px solid var(--ink);
   box-shadow: 0 4px 0 var(--ink);
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 .panel-buttons button:hover { background: #ffe98a; }
 .panel-buttons button:active { transform: translateY(4px); box-shadow: none; }
 
 #hint {
+  flex: 0 0 auto;
   margin: 0;
-  max-width: 96vw;
+  max-width: 100%;
   text-align: center;
   font-size: clamp(10px, 2vw, 13px);
   color: var(--dim);
   letter-spacing: 0.4px;
 }
+body.has-touch #hint { font-size: clamp(9px, 2.4vw, 12px); }
 
-/* ---------------- áreas seguras e orientações ---------------- */
+/* ---------------- áreas seguras (notch / barra de gestos) ---------------- */
 @supports (padding: env(safe-area-inset-bottom)) {
   body {
     padding-top: calc(6px + env(safe-area-inset-top));
@@ -232,9 +331,7 @@ body {
   }
 }
 
-/* retrato: mantém a arena inteira visível e o HUD legível */
+/* retrato estreito (360px de referência): HUD compacto */
 @media (orientation: portrait) {
-  #hud { font-size: clamp(9px, 2.6vw, 13px); }
-  .tbtn { width: clamp(50px, 15vw, 76px); height: clamp(50px, 15vw, 76px); }
-  #hint { font-size: clamp(9px, 2.4vw, 12px); }
+  #hud { font-size: clamp(9px, 2.9vw, 14px); }
 }

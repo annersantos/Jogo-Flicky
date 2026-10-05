@@ -744,7 +744,230 @@ section('Botão "Reiniciar campanha" e alternância de som');
   ok(SFX.isEnabled() === was, 'botão de som restaura o estado');
 }
 
-/* ---------------- resumo ---------------- */
+/* ---------------- 16. entrada unificada: teclado + toque com origens ---------------- */
+section('Entrada unificada (teclado + toque por origem)');
+{
+  // teclado pressiona, toque também → soltar o teclado NÃO zera a ação
+  dispatch('keydown', { key: 'ArrowRight', preventDefault() {} });
+  ok(Flicky.input.right === true, 'teclado: seta direita ativa');
+  fire('btnRight', 'pointerdown', { preventDefault() {}, pointerId: 10 });
+  ok(Flicky.input.right === true, 'toque: mesmo botão ativo junto');
+  dispatch('keyup', { key: 'ArrowRight', preventDefault() {} });
+  ok(Flicky.input.right === true, 'soltar a tecla mantém a ação (toque segura)');
+  fire('btnRight', 'pointerup', { preventDefault() {}, pointerId: 10 });
+  ok(Flicky.input.right === false, 'soltar o toque com tecla solta encerra a ação');
+
+  // caso inverso: toque pressiona, teclado também → soltar o toque NÃO zera
+  fire('btnLeft', 'pointerdown', { preventDefault() {}, pointerId: 11 });
+  dispatch('keydown', { key: 'ArrowLeft', preventDefault() {} });
+  fire('btnLeft', 'pointerup', { preventDefault() {}, pointerId: 11 });
+  ok(Flicky.input.left === true, 'soltar o toque mantém a ação (tecla segura)');
+  dispatch('keyup', { key: 'ArrowLeft', preventDefault() {} });
+  ok(Flicky.input.left === false, 'soltar a tecla encerra a ação');
+}
+
+/* ---------------- 17. multitoque: andar+saltar e andar+arremessar ---------------- */
+section('Multitoque: andar com pular e andar com arremessar');
+{
+  // prepara: jogador no chão
+  var guard = 0;
+  while (!Flicky.player().onGround && guard++ < 400) Flicky.tick(1);
+  var x0 = Flicky.player().x;
+
+  // 2 dedos: direita + salto ao mesmo tempo
+  fire('btnRight', 'pointerdown', { preventDefault() {}, pointerId: 21 });
+  fire('btnJump', 'pointerdown', { preventDefault() {}, pointerId: 22 });
+  ok(Flicky.input.right === true && Flicky.input.jump === true,
+     'dedo 1 segura mover e dedo 2 segura pular');
+  Flicky.tick(12);
+  var p = Flicky.player();
+  ok(p.y < LEVEL.GROUND_TOP - 10, 'salto executou enquanto andava (y=' + p.y.toFixed(1) + ')');
+  ok(p.x > x0 + 3, 'movimento lateral contou durante o salto (x=' + p.x.toFixed(1) + ')');
+  fire('btnRight', 'pointerup', { preventDefault() {}, pointerId: 21 });
+  fire('btnJump', 'pointerup', { preventDefault() {}, pointerId: 22 });
+  ok(Flicky.input.right === false && Flicky.input.jump === false,
+     'soltar os dois dedos encerra as duas ações');
+  guard = 0;
+  while (!Flicky.player().onGround && guard++ < 400) Flicky.tick(1);
+
+  // 2 dedos: direita + arremesso ao mesmo tempo
+  if (Flicky.get().carried !== 1) {
+    var idle = null;
+    for (var ti = 0; ti < Flicky.throwablesRef().length; ti++) {
+      if (Flicky.throwablesRef()[ti].state === 'idle') { idle = Flicky.throwablesRef()[ti]; break; }
+    }
+    if (idle) { Flicky.teleport(idle.x, idle.y); Flicky.tick(2); }
+  }
+  ok(Flicky.get().carried === 1, 'objeto coletado para o teste de arremesso');
+  var s0 = Flicky.get();
+  fire('btnRight', 'pointerdown', { preventDefault() {}, pointerId: 23 });
+  fire('btnThrow', 'pointerdown', { preventDefault() {}, pointerId: 24 });
+  ok(Flicky.input.right === true && Flicky.input.throwQueued === true,
+     'dedo 1 segura mover e dedo 2 dispara arremesso');
+  Flicky.tick(6);
+  ok(Flicky.get().carried === 0 && Flicky.get().flying >= 1,
+     'objeto lançado durante a movimentação');
+  fire('btnRight', 'pointerup', { preventDefault() {}, pointerId: 23 });
+  fire('btnThrow', 'pointerup', { preventDefault() {}, pointerId: 24 });
+  ok(Flicky.input.right === false, 'movimento parou ao soltar o dedo');
+  Flicky.tick(240);                  // objeto pousa
+}
+
+/* ---------------- 18. cancelamento de toques e limpeza por estado ---------------- */
+section('Cancelamento: pointercancel, pausa e retomada sem comandos presos');
+{
+  fire('btnLeft', 'pointerdown', { preventDefault() {}, pointerId: 31 });
+  ok(Flicky.input.left === true, 'toque ativo');
+  fire('btnLeft', 'pointercancel', { preventDefault() {}, pointerId: 31 });
+  ok(Flicky.input.left === false, 'pointercancel interrompe o comando');
+
+  fire('btnLeft', 'pointerdown', { preventDefault() {}, pointerId: 32 });
+  ok(Flicky.input.left === true, 'toque reativado');
+  dispatch('keydown', { key: 'Escape', preventDefault() {} });
+  ok(Flicky.get().state === 'pause' && Flicky.input.left === false,
+     'pausa limpa o comando pressionado');
+  fire('btnLeft', 'pointerup', { preventDefault() {}, pointerId: 32 });   // solto atrasado
+  ok(Flicky.input.left === false, 'pointerup atrasado após a pausa não reativa nada');
+
+  fire('btnRight', 'pointerdown', { preventDefault() {}, pointerId: 33 });
+  ok(Flicky.input.right === false, 'toque durante a pausa é ignorado');
+  dispatch('keydown', { key: 'Escape', preventDefault() {} });
+  ok(Flicky.get().state === 'play', 'retomada pelo teclado');
+  fire('btnRight', 'pointerdown', { preventDefault() {}, pointerId: 34 });
+  ok(Flicky.input.right === true, 'toque volta a funcionar após retomar');
+  fire('btnRight', 'pointerup', { preventDefault() {}, pointerId: 34 });
+  ok(Flicky.input.right === false, 'liberado corretamente');
+  fire('btnRight', 'pointercancel', { preventDefault() {}, pointerId: 33 }); // id antigo
+  ok(Flicky.input.right === false, 'cancelamento de id antigo é inofensivo');
+}
+
+/* ---------------- 19. botão de pausa, som persistente e textos de toque ---------------- */
+section('Botão de pausa, persistência do som e instruções de toque');
+{
+  ok(!!document.getElementById('btnPause'), 'botão de pausa presente no HUD');
+  fire('btnPause', 'click');
+  ok(Flicky.get().state === 'pause', 'botão de pausa pausa (toque)');
+  ok(elText('ovTitle') === 'Pausa', 'tela de pausa exibida pelo botão');
+  fire('btnPause', 'click');
+  ok(Flicky.get().state === 'play', 'botão de pausa retoma (toque)');
+
+  // preferência de som gravada em localStorage
+  var was = global.SFX.isEnabled();
+  fire('btnMute', 'click');
+  ok(global.localStorage.getItem('flicky.som') === (was ? '0' : '1'),
+     'preferência de som gravada em flicky.som');
+  ok(global.SFX.isEnabled() === !was, 'som alternado');
+  fire('btnMute', 'click');
+  ok(global.SFX.isEnabled() === was && global.localStorage.getItem('flicky.som') === (was ? '1' : '0'),
+     'preferência restaurada e gravada');
+
+  // sem suporte de tela cheia → botão permanece oculto (detecção de recurso)
+  ok(document.getElementById('btnFull').classList.contains('hidden'),
+     'botão de tela cheia oculto quando a API não existe');
+
+  // instruções em modo toque (simula aparelho com tela sensível ao toque)
+  window.matchMedia = function () { return { matches: true }; };
+  ok(Flicky.isTouch() === true, 'detecção de entrada por toque');
+  dispatch('keydown', { key: 'Escape', preventDefault() {} });   // pausa p/ ver textos
+  Flicky.refreshUI();
+  ok(elText('ovText').includes('Toque em "Continuar"'), 'tela de pausa com instrução de toque');
+  ok(document.getElementById('hint').textContent.includes('Toque:'),
+     'dica inferior adaptada para toque');
+  delete window.matchMedia;
+  Flicky.refreshUI();
+  ok(elText('ovText').includes('Esc, P'), 'texto volta ao modo teclado');
+  dispatch('keydown', { key: 'Escape', preventDefault() {} });
+  ok(Flicky.get().state === 'play', 'jogo retomado ao final do teste');
+}
+
+/* ---------------- 20. pausa ao trocar de aplicativo ---------------- */
+section('Pausa ao ocultar a aba e retorno aguardando o jogador');
+{
+  var guard = 0;
+  while (!Flicky.player().onGround && guard++ < 400) Flicky.tick(1);
+  fire('btnLeft', 'pointerdown', { preventDefault() {}, pointerId: 41 });
+  ok(Flicky.input.left === true, 'toque ativo antes de trocar de aplicativo');
+
+  document.hidden = true;
+  dispatch('doc:visibilitychange', {});
+  ok(Flicky.get().state === 'pause', 'aba oculta → pausa automática');
+  ok(elText('ovTitle') === 'Pausa', 'tela de pausa visível ao retornar');
+  ok(Flicky.input.left === false, 'comandos limpos ao ocultar (sem botão preso)');
+
+  document.hidden = false;
+  dispatch('doc:visibilitychange', {});
+  ok(Flicky.get().state === 'pause', 'ao voltar permanece pausado (aguarda o jogador)');
+  fire('btnLeft', 'pointerup', { preventDefault() {}, pointerId: 41 });   // dedo solto no app
+  ok(Flicky.input.left === false, 'pointerup atrasado não deixa comando ativo');
+  fire('ovBtn1', 'click');
+  ok(Flicky.get().state === 'play', 'jogador continua pelo botão "Continuar"');
+}
+
+/* ---------------- 21. redimensionar/girar preserva a partida (DPR com teto) ---------------- */
+section('Resize/rotação: escala de exibição sem reiniciar a partida');
+{
+  var snap = Flicky.get();
+  var px = Flicky.player().x, py = Flicky.player().y;
+
+  window.devicePixelRatio = 3;                    // exagerado de propósito
+  Flicky.resize();
+  var cv = document.getElementById('game');
+  ok(cv.width === 480 * 2 && cv.height === 270 * 2,
+     'DPR limitado ao teto (backbuffer ' + cv.width + 'x' + cv.height + ')');
+  var s = Flicky.get();
+  ok(s.phase === snap.phase && s.score === snap.score && s.lives === snap.lives &&
+     s.rescued === snap.rescued && s.queue === snap.queue && s.loose === snap.loose,
+     'redimensionar não altera fase/pontos/vidas/resgates/fila');
+  ok(Flicky.player().x === px && Flicky.player().y === py,
+     'redimensionar não move nenhuma entidade');
+
+  window.devicePixelRatio = 1;
+  Flicky.resize();
+  ok(cv.width === 480 && cv.height === 270, 'volta ao tamanho lógico 480x270 (DPR 1)');
+
+  dispatch('resize', {});                          // agendado por rAF
+  dispatch('orientationchange', {});               // giro: só re-layout
+  var s2 = Flicky.get();
+  ok(s2.phase === snap.phase && s2.score === snap.score && s2.lives === snap.lives,
+     'eventos de resize/rotação não tocam no estado do jogo');
+  ok(driveRaf(2, 16), 'laço segue executando após redimensionar (sem erros)');
+  var s3 = Flicky.get();
+  ok(s3.phase === snap.phase && s3.score === snap.score && s3.lives === snap.lives,
+     'quadros seguintes mantêm a partida intacta');
+}
+
+/* ---------------- 22. marcação: controles fora da arena + exigências estáticas ---------------- */
+section('Marcação e estilo: controles fora da arena, viewport e segurança');
+{
+  var html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  var css = fs.readFileSync(path.join(root, 'style.css'), 'utf8');
+
+  ok(!/user-scalable\s*=\s*no/.test(html) && !/maximum-scale/.test(html),
+     'viewport não bloqueia o zoom global');
+  ok(html.includes('viewport-fit=cover'), 'viewport-fit=cover para áreas seguras');
+  ok(html.includes('width=device-width'), 'viewport com largura do dispositivo');
+
+  var stageAt = html.indexOf('<div id="stage">');
+  var touchAt = html.indexOf('<div id="touch"');
+  ok(stageAt >= 0 && touchAt > stageAt, 'bloco de controles existe');
+  var slice = html.slice(stageAt, touchAt);
+  var opens = (slice.match(/<div/g) || []).length;
+  var closes = (slice.match(/<\/div>/g) || []).length;
+  ok(opens === closes, 'controles estão FORA do #stage (arena nunca encoberta)');
+
+  ok(css.includes('touch-action: none') && css.includes('#game'),
+     'touch-action: none na superfície do jogo');
+  ok(css.includes('safe-area-inset'), 'áreas seguras via env(safe-area-inset-*)');
+  ok(css.includes('aspect-ratio: 16 / 9'), 'proporção original da arena preservada');
+  ok(css.includes('min-width: 48px') && css.includes('min-height: 48px'),
+     'alvos de toque mínimos 48x48 CSS');
+  ok(css.includes('orientation: landscape') && css.includes('orientation: portrait'),
+     'layouts separados por orientação');
+  ok(css.includes('has-touch'), 'controles de toque condicionados a entrada por toque');
+  ok(css.includes('.pressed'), 'resposta visual de botão pressionado (não só :hover)');
+}
+
+
 console.log('\n---------------------------------------------');
 console.log('Resultados: ' + pass + ' passaram, ' + fail + ' falharam');
 if (fail > 0) {

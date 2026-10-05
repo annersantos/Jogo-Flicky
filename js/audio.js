@@ -116,11 +116,23 @@
 
   function play(name, arg) {
     if (!enabled) return;
-    if (!ctx) init();
-    if (!ctx) return;
-    if (ctx.state === 'suspended') ctx.resume();
-    var fn = SFX[name];
-    if (fn) fn(arg);
+    try {
+      if (!ctx) init();
+      if (!ctx) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      var fn = SFX[name];
+      if (fn) fn(arg);
+    } catch (e) { /* falha de áudio nunca interrompe a partida */ }
+  }
+
+  /* pausa/retoma o contexto junto com a visibilidade da página */
+  function suspend() {
+    try { if (ctx && ctx.suspend && ctx.state === 'running') ctx.suspend(); }
+    catch (e) { /* indisponível */ }
+  }
+  function resume() {
+    try { if (ctx && ctx.resume && ctx.state === 'suspended') ctx.resume(); }
+    catch (e) { /* indisponível */ }
   }
 
   function setEnabled(v) {
@@ -130,5 +142,8 @@
 
   function isEnabled() { return enabled; }
 
-  global.SFX = { init: init, play: play, setEnabled: setEnabled, isEnabled: isEnabled };
+  global.SFX = {
+    init: init, play: play, setEnabled: setEnabled, isEnabled: isEnabled,
+    suspend: suspend, resume: resume
+  };
 })(window);
