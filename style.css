@@ -1,8 +1,12 @@
 /* Flicky do Jardim — layout responsivo (desktop + celular) e visual pixel art
 
-   Estrutura: #hud (informações) → #mid (arena + controles) → #hint
-   - Retato:  HUD no topo, arena no centro, controles ABAIXO (fora da arena)
-   - Paisagem: controles em TRILHAS LATERAIS reservadas (polegares)
+   Estrutura: #hud (painel) → #mid (arena + controles) → #hint
+   - Retato:  painel COMPACTO no topo, arena logo abaixo (largura quase total),
+              controles logo após a arena; vazio residual só no fim (com dica de rotação)
+   - Paisagem: disposição escolhida pelo JS — laterais (#mid.mid-sides) ou abaixo,
+              sempre a que resultar na MAIOR arena
+   - O tamanho do #stage é calculado no JS: escala = min(largDisp/480, altDisp/270);
+      a resolução interna do canvas é separada (visual × dpr com teto DPR_CAP)
    - Resolução lógica do jogo: 480×270 (nunca distorcida — aspect-ratio 16/9)
    - Áreas seguras (notch / barra de gestos) via env(safe-area-inset-*)          */
 :root {
@@ -30,7 +34,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;        /* empilha de cima: sem centralização em área grande */
   gap: 6px;
   overflow: hidden;
   background: radial-gradient(circle at 50% 20%, #1c2c4d 0%, #101a2e 70%);
@@ -129,13 +133,24 @@ body {
     "stage stage"
     "padl  padr";
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;      /* linhas no tamanho do conteúdo (sem 1fr vazio) */
   gap: var(--gap);
-  align-content: center;
+  align-content: center;              /* desktop: centralizado como antes */
   justify-items: center;
   align-items: center;
   container-type: size;               /* permite 100cqw/100cqh nos filhos */
 }
+
+/* toque: tudo empilhado e encostado — vazio residual só no fim da área */
+body.has-touch #mid { align-content: start; }
+
+/* paisagem com controles nas laterais (escolhido quando dá a maior arena) */
+#mid.mid-sides {
+  grid-template-areas: "padl stage padr";
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto;
+}
+#mid.mid-sides .pad { flex-direction: column; align-self: end; }
 
 #stage {
   grid-area: stage;
@@ -215,15 +230,27 @@ body {
 /* ---------------- modo celular: controles visíveis e layout por orientação ---------------- */
 body.has-touch .touch-controls { display: contents; }
 
-/* interface por toque: alvos maiores e rótulo curto de som */
+/* interface por toque: HUD compacto (1–2 linhas), ação em 44×44 */
 body.has-touch .hbtn {
-  min-width: 48px;
-  min-height: 48px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 2px 4px;
 }
 body.has-touch #muteLabel { display: none; }
+body.has-touch #record { display: none; }        /* recorde fica no menu/pausa */
+body.has-touch .hud-label { display: none; }     /* só os ícones de vida */
+body.has-touch #hud {
+  gap: 4px;
+  padding: 3px 5px;
+  border-width: 2px;
+  box-shadow: 0 2px 0 var(--ink);
+  font-size: clamp(9px, 2.7vw, 13px);
+}
+body.has-touch .hud-box { border-width: 1px; padding: 2px 5px; }
+body.has-touch .hud-actions { gap: 4px; }
 
-/* RETRATO: informações em cima, arena no meio, controles embaixo */
-body.has-touch { --btn: clamp(54px, 16vw, 74px); --gap: 8px; }
+/* RETRATO: painel no topo, arena em seguida, controles logo abaixo */
+body.has-touch { --btn: clamp(56px, 16vw, 72px); --gap: 8px; }
 body.has-touch #stage {
   width: min(calc(100% - 8px), calc((100vh - var(--btn) - var(--gap) - 110px) * 16 / 9));
 }
@@ -233,21 +260,15 @@ body.has-touch #stage {
   }
 }
 
-/* PAISAGEM: controles nas laterais reservadas (polegares inferiores) */
+/* PAISAGEM: botões entre 56–72px conforme a altura; dica de rotação não faz sentido.
+   A disposição (laterais × abaixo) é escolhida pelo JS conforme der a MAIOR arena. */
 @media (orientation: landscape) {
-  body.has-touch { --btn: clamp(48px, 9vh, 64px); }
-  body.has-touch #mid {
-    grid-template-areas: "padl stage padr";
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    grid-template-rows: 1fr;
-  }
-  body.has-touch .pad { flex-direction: column; align-self: end; }
-  body.has-touch #stage {
-    width: min(calc(100% - 8px), calc((100vh - 96px) * 16 / 9));
-  }
+  body.has-touch { --btn: clamp(56px, 13vh, 72px); }
+  body.has-touch #hint { display: none; }
+  /* aproximação pré-JS (o JS sobrescreve com o cálculo exato) */
   @supports (width: 1cqw) {
     body.has-touch #stage {
-      width: min(calc(100% - 8px), calc(100cqh * 16 / 9));
+      width: min(calc(100% - 8px - 2 * var(--btn) - 16px), calc(100cqh * 16 / 9));
     }
   }
 }
@@ -272,9 +293,16 @@ body.has-touch #stage {
   max-width: 84%;
   touch-action: manipulation;         /* pinch-zoom liberado nas instruções */
   overscroll-behavior: contain;
+  /* nunca maior que a arena: título e botões ficam fixos e o TEXTO rola.
+     (sem overflow na arena cabe, o painel renderiza exatamente como antes) */
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .panel h1 {
+  flex: 0 0 auto;                     /* título sempre visível */
   margin: 0 0 8px;
   color: var(--accent);
   font-size: clamp(22px, 6vw, 44px);
@@ -283,6 +311,10 @@ body.has-touch #stage {
 }
 
 .panel p {
+  flex: 1 1 auto;                     /* só o texto encolhe/rola */
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   margin: 0 0 14px;
   font-size: clamp(12px, 2.6vw, 17px);
   color: var(--text);
@@ -290,7 +322,7 @@ body.has-touch #stage {
   line-height: 1.45;
 }
 
-.panel-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.panel-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; flex: 0 0 auto; }
 
 .panel-buttons button {
   min-height: 48px;                  /* alvo de toque confortável */
@@ -309,6 +341,19 @@ body.has-touch #stage {
 }
 .panel-buttons button:hover { background: #ffe98a; }
 .panel-buttons button:active { transform: translateY(4px); box-shadow: none; }
+
+/* toque: painel compacto para caber na arena de 16/9 (texto ainda rola se preciso) */
+body.has-touch .panel { padding: 8px 14px; }
+body.has-touch .panel h1 {
+  font-size: clamp(20px, 6vw, 36px);
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+body.has-touch .panel p {
+  font-size: clamp(11px, 3vw, 15px);
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
 
 #hint {
   flex: 0 0 auto;

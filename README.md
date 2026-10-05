@@ -187,12 +187,13 @@ jogo-flicky/
 │   ├── level.js          # Carregador central de fases + cenários temáticos (cache)
 │   └── game.js           # Física, fila/histórico, gatos, arremesso, estados, HUD,
 │                         #   entrada unificada (teclado+toque), resize/DPR, laço rAF
-├── PLANO_IMPLEMENTACAO.md# Plano da adaptação mobile (7 etapas)
+├── PLANO_IMPLEMENTACAO.md# Plano da adaptação mobile (8 etapas)
 ├── README.md             # Este arquivo
 └── tests/                # Testes (opcional, requer Node.js)
-    ├── headless.js       # Suíte headless (420 asserções)
+    ├── headless.js       # Suíte headless (442 asserções)
     ├── render.js         # Renderizador software → PNGs em tests/out/
-    └── out/              # Frames de inspeção gerados
+    ├── layout-preview.js # Capturas reais do layout (Chrome/Edge headless)
+    └── out/              # Frames de inspeção e capturas de layout geradas
 ```
 
 ## Testes (opcional)
@@ -200,11 +201,14 @@ jogo-flicky/
 Os testes rodam no **Node.js** e não são necessários para jogar.
 
 ```bash
-# Regressão de lógica/física/regras + mobile (420 asserções)
+# Regressão de lógica/física/regras + mobile (442 asserções)
 node tests/headless.js
 
 # Gerar frames de inspeção em tests/out/*.png
 node tests/render.js
+
+# Capturas reais do layout (vertical/paisagem/desktop) via Chrome/Edge headless
+node tests/layout-preview.js
 ```
 
 A suíte cobre, entre outros: menu/inicialização, física e salto, laço principal
@@ -219,9 +223,11 @@ vitória somente após a fase 10, Game Over, nova campanha, recorde no
 teclado+toque por origem, multitoque (andar+saltar, andar+arremessar),
 `pointerup`/`pointercancel` interrompendo comandos, pausa por botão, pausa ao
 ocultar a aba aguardando o jogador, resize/rotação preservando a partida, teto
-de `devicePixelRatio`, persistência do som, instruções adaptadas ao toque e
-verificações estáticas de marcação/estilo (controles fora da arena, viewport,
-áreas seguras, alvos 48px)**.
+de `devicePixelRatio`, persistência do som, instruções adaptadas ao toque,
+matemática de layout (**escala `min(larguraDisp/480, alturaDisp/270)`,
+disposição automática laterais×abaixo pela maior arena, rotação sem comandos
+presos**) e verificações estáticas de marcação/estilo (controles fora da arena,
+viewport, áreas seguras, alvos 48px)**.
 
 ## Navegadores
 

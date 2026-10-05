@@ -153,3 +153,70 @@ Todas as skills solicitadas estavam disponíveis.
 **Critério de conclusão**
 - `node tests/headless.js` → 0 falhas; `node tests/render.js` → frames gerados; README com seção mobile.
 - **Pendente em aparelho real (não automatizável aqui):** toque multi-dedo real, fluidez em aparelho (iPhone 13/Android), comportamento da barra do Safari, notch/áreas seguras, gyro/orientação e áudio real.
+
+---
+
+## 8. Correção do layout mobile — arena pequena e espaços vazios (iteração 2)
+
+### 8.1 Causa encontrada (inspeção do CSS e do cálculo do Canvas)
+
+No iPhone (retrato, 390×844) a arena estava **corretamente na largura total**, mas
+centralizada dentro de uma **linha de grid com altura livre** — daí a percepção de
+"arena pequena com grandes vazios acima e abaixo", somada a um painel alto:
+
+| Origem | Efeito |
+| --- | --- |
+| `#mid { grid-template-rows: minmax(0, 1fr) }` — a linha da arena recebe **todo** o espaço vertical | ~600px de linha para uma arena de ~208px |
+| `#mid { align-content: center; align-items: center }` — **centralização vertical em área grande** | ~170px de vazio **acima** e ~170px **abaixo** da arena |
+| `#hud` com 5 caixas + rótulo "Vidas" + caixa "Recorde" + 3 botões de 48px, bordas e paddings grandes | painel quebra em **3 linhas** (~100px) |
+| `#hint` — linha **permanente de instruções** abaixo dos controles | +14px e ruído visual |
+| Escala da arena só via fórmulas CSS (`100cqh`) sem cálculo explícito de `min(larguraDisp/480, alturaDisp/270)` | sem controle fino do que é disponível após painel/controles/áreas seguras |
+| Sem seleção automática de disposição em paisagem (regras amarradas a `@media (orientation)`) | controles laterais sempre, mesmo quando abaixo daria arena maior |
+
+A física, o Canvas lógico 480×270 e o `devicePixelRatio` com teto já estavam
+corretos — o problema era **distribuição de espaço e chrome de interface**.
+
+### 8.2 Tarefas
+
+- [x] **Cálculo de escala no JS**: `computeLayout(availW, availH, ctrl, gap, landscape)`
+  com `escala = Math.min(larguraDisponível / 480, alturaDisponível / 270)`, medido no
+  `#mid` (área **já líquida** de painel, controles, `dvh` e `env(safe-area-inset-*)`).
+  Tamanho **visual** (px no `#stage`) separado da **resolução interna** (backbuffer do
+  canvas = tamanhoVisual × dpr com `DPR_CAP`, suavização desligada, sem teto inteiro).
+- [x] **Retrato**: empilhar sem vazios entre elementos — `grid-template-rows: auto auto`
+  e `align-content: start` no modo toque (HUD colado na arena, controles logo abaixo);
+  vazio residual apenas **no fim**, com dica discreta “Vire o celular para jogar com a
+  tela maior”. No desktop mantém-se a centralização atual (layout preservado).
+- [x] **Paisagem com disposição automática**: classe `#mid.mid-sides` (controles em
+  trilhas laterais) escolhida pelo **maior** arena; se “controles abaixo” render
+  maior (janela estreita/alta), usa essa disposição automaticamente.
+- [x] **HUD compacto**: sem caixa “Recorde” (recorde fica no menu/pausa), sem rótulo
+  “Vidas”, bordas/padding/gaps reduzidos, botões de pausa/som **44×44** mínimos —
+  alvo de 1–2 linhas curtas com pontuação, vidas, fase e resgatados.
+- [x] **Sem linha permanente de instruções**: `#hint` no toque exibe só a dica de
+  rotação (oculto em paisagem); instruções de controle ficam no **menu e na pausa**.
+- [x] **Painel dos overlays sempre dentro da arena** (defeito revelado pelas
+  capturas): `.panel` vira coluna flex com `max-height: 100%` — **título e botões
+  ficam fixos** e só o texto rola; antes, o menu (≈330px) era maior que a arena
+  (≈208px) e `#stage { overflow: hidden }` cortava o título e o botão. Tipografia
+  do painel compacta no toque. Sem overflow, o desktop renderiza igual.
+- [x] **Botões de ação entre 56 e 72px** conforme o espaço (`clamp`), containers de
+  controle sem margens/paddings extras.
+- [x] **Sem comandos presos**: `clearInput()` ao girar (`orientationchange`) e quando
+  a disposição muda; redimensionar/girar **não** reinicia fase nem altera posições.
+- [x] Barras do Safari: `100dvh` com fallback, `env(safe-area-inset-*)` e
+  `window.visualViewport.resize` recalculam o layout.
+- [x] Validação: matemática `computeLayout` (retrato/paisagem/janela estreita/desktop),
+  aplicação no DOM com retângulos simulados, preservação da partida, capturas de
+  layout vertical e horizontal (`tests/layout-preview.js` → `tests/out/`).
+
+### 8.3 Critérios de conclusão
+
+- Retrato iPhone 13: HUD ≤2 linhas, arena na largura total (≈370×208 CSS), controles
+  encostados na arena, **zero vazio entre elementos**, dica de rotação discreta.
+- Menu/pausa inteiros nas duas orientações: título e botão sempre visíveis dentro
+  da arena (texto rola quando não cabe).
+- Paisagem iPhone 13: arena = maior retângulo possível (controles laterais 56–72px);
+  disposição inferior escolhida automaticamente quando maior.
+- Girar/redimensionar preserva fase, pontos, vidas e posições; nenhum comando preso.
+- Desktop: layout e controles como estavam. Suíte completa verde + capturas geradas.

@@ -1,0 +1,80 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<pre id="r">...</pre>
+<script>
+/* Sonda objetiva de capturas: frame, hint, trilhas laterais e recorte do painel.
+   Uso: imgprobe.html?f=layout-vertical.png  (Chrome com --allow-file-access-from-files) */
+var name = (location.search.split('f=')[1] || 'layout-desktop.png');
+var img = new Image();
+img.onload = function () {
+  var c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  var x = c.getContext('2d');
+  x.drawImage(img, 0, 0);
+  var d = x.getImageData(0, 0, img.width, img.height).data;
+  function at(xx, yy) { var i = (yy * img.width + xx) * 4; return [d[i], d[i+1], d[i+2]]; }
+  function isPanel(p) { return Math.abs(p[0]-27)<8 && Math.abs(p[1]-42)<8 && Math.abs(p[2]-71)<8; }
+  function isYellow(p) { return p[0]>215 && p[1]>180 && p[1]<235 && p[2]<130; }
+
+  /* bbox do conteúdo (não é o fundo #05070d do frame.html) */
+  var minX=img.width, minY=img.height, maxX=0, maxY=0;
+  for (var yy=0; yy<img.height; yy+=3) for (var xx=0; xx<img.width; xx+=3) {
+    var p = at(xx, yy);
+    if (!(Math.abs(p[0]-5)<6 && Math.abs(p[1]-7)<6 && Math.abs(p[2]-13)<6)) {
+      if (xx<minX) minX=xx; if (xx>maxX) maxX=xx;
+      if (yy<minY) minY=yy; if (yy>maxY) maxY=yy;
+    }
+  }
+
+  /* hint de teclado na base (só no desktop) + cor 30px à esquerda (pad lateral?) */
+  var lightBottom = 0;
+  for (var y2=maxY-26; y2<=maxY-4; y2+=2)
+    for (var x2=minX+10; x2<maxX-10; x2+=3) {
+      var q = at(x2, y2);
+      if (q[0]>90 && q[1]>110 && q[2]>140) lightBottom++;
+    }
+  var leftEdge = at(minX+30, maxY-60);
+
+  /* faixas amarelas verticais em toda a largura (HUD, título, botão — nessa ordem) */
+  var runs = [], inRun = false, rStart = 0;
+  for (var y3=minY; y3<=maxY; y3++) {
+    var found = false;
+    for (var x3=minX; x3<=maxX; x3+=2) {
+      if (isYellow(at(x3, y3))) { found = true; break; }
+    }
+    if (found && !inRun) { inRun = true; rStart = y3; }
+    else if (!found && inRun) { inRun = false; runs.push([rStart, y3-1]); }
+  }
+  if (inRun) runs.push([rStart, maxY]);
+
+  /* acima da penúltima faixa (título) e abaixo da última (botão): é cor de painel?
+     ≥60% = padding visível = NÃO recortado; ~0 = encostado na borda = RECORTADO */
+  function panelRatio(yA, yB, halfW) {
+    var tot = 0, ok = 0;
+    for (var yy2=yA; yy2<=yB; yy2++) {
+      if (yy2 < minY || yy2 > maxY) continue;
+      for (var xx2=Math.max(minX, Math.floor((minX+maxX)/2 - halfW));
+           xx2<=Math.min(maxX, Math.floor((minX+maxX)/2 + halfW)); xx2++) {
+        tot++; if (isPanel(at(xx2, yy2))) ok++;
+      }
+    }
+    return tot ? Math.round(100 * ok / tot) : -1;
+  }
+  var titleTop = runs.length >= 2 ? runs[runs.length-2][0] : -1;
+  var titleBot = runs.length >= 2 ? runs[runs.length-2][1] : -1;
+  var btnBot   = runs.length >= 1 ? runs[runs.length-1][1] : -1;
+  var aboveTitle = titleTop >= 0 ? panelRatio(titleTop-6, titleTop-1, 100) : -1;
+  var belowBtn   = btnBot >= 0 ? panelRatio(btnBot+1, btnBot+6, 60) : -1;
+
+  document.getElementById('r').textContent =
+    'SIZE=' + img.width + 'x' + img.height +
+    ' FRAME=' + (maxX-minX+1) + 'x' + (maxY-minY+1) +
+    ' LIGHT_BOTTOM=' + lightBottom +
+    ' LEFTEdge=' + leftEdge.join('/') +
+    ' YEL=[' + runs.map(function(r){ return r[0] + '-' + r[1]; }).join(',') + ']' +
+    ' TITLE=' + titleTop + '-' + titleBot +
+    ' BTN_BOT=' + btnBot +
+    ' PANEL_ABOVE_TITLE=' + aboveTitle + '%' +
+    ' PANEL_BELOW_BTN=' + belowBtn + '%';
+};
+img.src = name;
+</script></body></html>

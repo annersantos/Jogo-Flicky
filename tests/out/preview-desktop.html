@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <base href="file:///C:/Users/User/.gemini/antigravity/scratch/Jogos/jogo-flicky/">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101a2e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Flicky do Jardim</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="hud">
+    <div id="score" class="hud-box">Pontos: 0</div>
+    <div id="record" class="hud-box">Recorde: 0</div>
+    <div id="phase" class="hud-box">Fase 1/10</div>
+    <div class="hud-box lives">
+      <span class="hud-label">Vidas</span>
+      <span class="life-icons">
+        <img id="life0" alt="vida" draggable="false">
+        <img id="life1" alt="vida" draggable="false">
+        <img id="life2" alt="vida" draggable="false">
+      </span>
+    </div>
+    <div id="rescued" class="hud-box">Resgatados: 0/6</div>
+    <div class="hud-actions">
+      <button id="btnPause" class="hbtn" type="button" title="Pausar" aria-label="Pausar">&#10074;&#10074;</button>
+      <button id="btnFull" class="hbtn hidden" type="button" title="Tela cheia" aria-label="Tela cheia">&#9974;</button>
+      <button id="btnMute" class="hbtn" type="button" title="Desativar som" aria-label="Desativar som">
+        <img id="muteIcon" alt="" draggable="false">
+        <span id="muteLabel">Som ligado</span>
+      </button>
+    </div>
+  </header>
+
+  <div id="mid">
+    <div id="stage">
+      <canvas id="game" width="480" height="270"></canvas>
+
+      <div id="overlay" class="hidden">
+        <div class="panel">
+          <h1 id="ovTitle">Pausa</h1>
+          <p id="ovText"></p>
+          <div class="panel-buttons">
+            <button id="ovBtn1" type="button">Continuar</button>
+            <button id="ovBtn2" type="button">Reiniciar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="touch" class="touch-controls">
+      <div class="pad pad-left">
+        <button id="btnLeft" class="tbtn" type="button" aria-label="Mover para a esquerda">&#9664;</button>
+        <button id="btnRight" class="tbtn" type="button" aria-label="Mover para a direita">&#9654;</button>
+      </div>
+      <div class="pad pad-right">
+        <button id="btnThrow" class="tbtn tbtn-throw" type="button" aria-label="Lançar objeto">&#10148;</button>
+        <button id="btnJump" class="tbtn" type="button" aria-label="Pular">&#9650;</button>
+      </div>
+    </div>
+  </div>
+
+  <p id="hint">
+    Setas ou A/D: mover &middot; Espa&ccedil;o, W ou &uarr;: pular &middot; X ou J: arremessar
+    &middot; Esc ou P: pausa &middot; M: som
+  </p>
+
+  <script src="js/sprites.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/levels.js"></script>
+  <script src="js/level.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

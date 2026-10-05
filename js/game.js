@@ -852,8 +852,75 @@
     resizePending = true;
     requestAnimationFrame(function () {
       resizePending = false;
-      resizeCanvas();
+      updateLayout();                 // escala da arena no espaço realmente disponível
+      resizeCanvas();                 // backbuffer acompanha o tamanho visual
     });
+  }
+
+  /* ---------------- layout: escala visual da arena (min da largura/altura) ----------------
+     O tamanho VISUAL do #stage (CSS px) é definido aqui; a resolução interna de
+     renderização continua sendo a do canvas (visual × dpr com teto) em resizeCanvas(). */
+  var STAGE_BORDER = 8;               // moldura do #stage (4px por lado)
+  var layoutMode = null;              // 'below' | 'sides' | null (ainda não calculado)
+
+  /* puro: escolhe a disposição e a escala maiores preservando 16/9 */
+  function computeLayout(availW, availH, ctrl, gap, landscape) {
+    var LW = LEVEL.W, LH = LEVEL.H;
+    var hasCtrl = ctrl > 0;
+    // controles abaixo: arena pega a largura toda e a altura menos o bloco de botões
+    var sBelow = Math.min(
+      (availW - STAGE_BORDER) / LW,
+      (availH - (hasCtrl ? ctrl + gap : 0) - STAGE_BORDER) / LH
+    );
+    // controles nas laterais: arena perde as faixas dos botões, ganha a altura toda
+    var sSides = hasCtrl
+      ? Math.min(
+          (availW - 2 * ctrl - 2 * gap - STAGE_BORDER) / LW,
+          (availH - STAGE_BORDER) / LH
+        )
+      : sBelow;
+    var mode = 'below', scale = sBelow;
+    if (landscape && hasCtrl && sSides > sBelow) { mode = 'sides'; scale = sSides; }
+    if (!(scale > 0)) scale = 0;
+    return { scale: scale, w: Math.round(LW * scale), h: Math.round(LH * scale), mode: mode };
+  }
+
+  function measureRect(el) {
+    try {
+      if (el && el.getBoundingClientRect) {
+        var r = el.getBoundingClientRect();
+        if (r && r.width > 0 && r.height > 0) return r;
+      }
+    } catch (e) { /* sem medida de layout */ }
+    return null;
+  }
+
+  /* aplica o cálculo ao #stage; só mexe em estilos/classe — nunca no estado do jogo */
+  function updateLayout() {
+    var mid = document.getElementById('mid');
+    var stageEl = document.getElementById('stage');
+    if (!mid || !stageEl || !stageEl.style) return;
+    var rect = measureRect(mid);
+    if (!rect) return;                             // sem layout real (testes headless)
+    // tamanho real dos botões de toque (0 quando ocultos → sem controles na conta)
+    var ctrl = 0;
+    var sample = document.getElementById('btnLeft');
+    var sr = measureRect(sample);
+    if (sr) ctrl = Math.max(sr.width, sr.height);
+    var gap = ctrl > 0 ? 8 : 0;
+    var landscape = window.innerWidth != null && window.innerHeight != null &&
+      window.innerWidth >= window.innerHeight;
+    var L = computeLayout(rect.width, rect.height, ctrl, gap, landscape);
+    if (!(L.scale > 0)) return;
+    stageEl.style.width = L.w + 'px';
+    stageEl.style.height = L.h + 'px';
+    if (mid.classList) {
+      if (L.mode === 'sides') mid.classList.add('mid-sides');
+      else mid.classList.remove('mid-sides');
+    }
+    // giro ou troca de disposição: nenhum comando pode ficar preso
+    if (layoutMode !== null && layoutMode !== L.mode) clearInput();
+    layoutMode = L.mode;
   }
 
   /* ---------------- detecção de entrada por toque ---------------- */
@@ -888,8 +955,9 @@
   }
 
   function hintText() {
+    // no toque: só a dica de rotação (instruções de controle ficam no menu/pausa)
     if (isTouchDevice()) {
-      return 'Toque: ◀ ▶ mover · ▲ pular · ➤ lançar · ⏸ pausa · □ som';
+      return 'Vire o celular para jogar com a tela maior';
     }
     return 'Setas ou A/D: mover · Espaço, W ou ↑: pular · X ou J: arremessar' +
       ' · Esc ou P: pausa · M: som';
@@ -1167,11 +1235,15 @@
 
     // redimensionar/girar o aparelho recalcula só a escala de exibição
     window.addEventListener('resize', scheduleResize);
-    window.addEventListener('orientationchange', scheduleResize);
+    window.addEventListener('orientationchange', function () {
+      clearInput();                    // rotação: nenhum comando preso
+      scheduleResize();
+    });
     if (window.visualViewport && window.visualViewport.addEventListener) {
       window.visualViewport.addEventListener('resize', scheduleResize);
     }
 
+    updateLayout();                    // tamanho visual da arena (min largura/altura)
     resizeCanvas();                    // backbuffer devicePixelRatio (teto DPR_CAP)
     loadPhase(1);
     state = 'menu';
@@ -1232,6 +1304,8 @@
     nextPhase: nextPhase,
     throwNow: function () { doThrow(); },
     resize: resizeCanvas,                           // redimensiona sem tocar no estado
+    layout: updateLayout,                           // recalcula tamanho/disposição da arena
+    computeLayout: computeLayout,                   // matemática pura (testes)
     refreshUI: refreshUI,                           // reaplica textos/toque-ou-teclado
     isTouch: isTouchDevice,
     input: input
