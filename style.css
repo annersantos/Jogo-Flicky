@@ -1,0 +1,240 @@
+/* Flicky do Jardim — layout responsivo e visual pixel art */
+:root {
+  --bg: #101a2e;
+  --panel: #1b2a47;
+  --ink: #0a1120;
+  --accent: #ffd34d;
+  --text: #eaf2ff;
+  --dim: #8fa6c4;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 20%, #1c2c4d 0%, #101a2e 70%);
+  color: var(--text);
+  font-family: "Courier New", ui-monospace, monospace;
+  font-weight: bold;
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+}
+
+.hidden { display: none !important; }
+
+/* ---------------- HUD ---------------- */
+#hud {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: min(96vw, calc((100vh - 108px) * 16 / 9));
+  padding: 5px 7px;
+  background: var(--panel);
+  border: 3px solid var(--ink);
+  box-shadow: 0 3px 0 var(--ink);
+  font-size: clamp(10px, 2.1vw, 15px);
+  letter-spacing: 0.5px;
+}
+
+.hud-box {
+  background: #0e1730;
+  border: 2px solid var(--ink);
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.hud-box.lives { display: flex; align-items: center; gap: 6px; }
+.hud-label { color: var(--dim); font-size: 0.9em; }
+.life-icons { display: inline-flex; gap: 3px; }
+.life-icons img {
+  width: clamp(16px, 3.4vw, 22px);
+  height: clamp(16px, 3.4vw, 22px);
+  image-rendering: pixelated;
+}
+
+#btnMute {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  background: #0e1730;
+  color: var(--text);
+  border: 2px solid var(--ink);
+  box-shadow: 0 2px 0 var(--ink);
+  font: inherit;
+  font-size: 0.92em;
+  cursor: pointer;
+}
+#btnMute:hover { background: #16224a; }
+#btnMute:active { transform: translateY(2px); box-shadow: none; }
+#btnMute img {
+  width: clamp(14px, 3vw, 18px);
+  height: clamp(14px, 3vw, 18px);
+  image-rendering: pixelated;
+}
+
+/* ---------------- palco do jogo ---------------- */
+#stage {
+  position: relative;
+  width: min(96vw, calc((100vh - 108px) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  background: #6ec6ff;
+  border: 4px solid var(--ink);
+  box-shadow: 0 4px 0 var(--ink), 0 14px 34px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  touch-action: none;
+}
+
+#game {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  touch-action: none;
+}
+
+@supports (height: 100dvh) {
+  #hud, #stage { width: min(96vw, calc((100dvh - 108px) * 16 / 9)); }
+}
+
+/* ---------------- controles mobile ---------------- */
+.touch-controls { display: none; }
+.pad {
+  position: absolute;
+  bottom: 5%;
+  display: flex;
+  gap: 10px;
+  pointer-events: auto;
+}
+.pad-left { left: 3%; }
+.pad-right { right: 3%; }
+
+.tbtn {
+  width: clamp(54px, 13vw, 86px);
+  height: clamp(54px, 13vw, 86px);
+  border-radius: 14px;
+  border: 3px solid var(--ink);
+  background: rgba(255, 255, 255, 0.26);
+  color: #ffffff;
+  font-size: clamp(20px, 5vw, 34px);
+  line-height: 1;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  box-shadow: 0 3px 0 var(--ink);
+}
+.tbtn:active {
+  background: rgba(255, 211, 77, 0.85);
+  color: #17223b;
+  transform: translateY(3px);
+  box-shadow: none;
+}
+/* arremesso: cor distinta para diferenciar do salto (Von Restorff) */
+.tbtn-throw {
+  background: rgba(255, 159, 28, 0.42);
+}
+.tbtn-throw:active {
+  background: rgba(255, 211, 77, 0.9);
+  color: #17223b;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .touch-controls { display: block; position: absolute; inset: 0; }
+  #hint { font-size: 10px; }
+}
+
+/* ---------------- overlays ---------------- */
+#overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 17, 32, 0.78);
+}
+
+.panel {
+  background: var(--panel);
+  border: 4px solid var(--ink);
+  box-shadow: 0 6px 0 var(--ink);
+  padding: clamp(12px, 3vw, 26px) clamp(16px, 4vw, 34px);
+  text-align: center;
+  max-width: 84%;
+}
+
+.panel h1 {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: clamp(22px, 6vw, 44px);
+  letter-spacing: 3px;
+  text-shadow: 2px 2px 0 var(--ink);
+}
+
+.panel p {
+  margin: 0 0 14px;
+  font-size: clamp(12px, 2.6vw, 17px);
+  color: var(--text);
+  white-space: pre-line;
+  line-height: 1.45;
+}
+
+.panel-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+.panel-buttons button {
+  padding: 9px 16px;
+  font: inherit;
+  font-size: clamp(13px, 2.8vw, 17px);
+  color: #17223b;
+  background: var(--accent);
+  border: 3px solid var(--ink);
+  box-shadow: 0 4px 0 var(--ink);
+  cursor: pointer;
+}
+.panel-buttons button:hover { background: #ffe98a; }
+.panel-buttons button:active { transform: translateY(4px); box-shadow: none; }
+
+#hint {
+  margin: 0;
+  max-width: 96vw;
+  text-align: center;
+  font-size: clamp(10px, 2vw, 13px);
+  color: var(--dim);
+  letter-spacing: 0.4px;
+}
+
+/* ---------------- áreas seguras e orientações ---------------- */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-top: calc(6px + env(safe-area-inset-top));
+    padding-right: calc(6px + env(safe-area-inset-right));
+    padding-bottom: calc(6px + env(safe-area-inset-bottom));
+    padding-left: calc(6px + env(safe-area-inset-left));
+  }
+}
+
+/* retrato: mantém a arena inteira visível e o HUD legível */
+@media (orientation: portrait) {
+  #hud { font-size: clamp(9px, 2.6vw, 13px); }
+  .tbtn { width: clamp(50px, 15vw, 76px); height: clamp(50px, 15vw, 76px); }
+  #hint { font-size: clamp(9px, 2.4vw, 12px); }
+}
