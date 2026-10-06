@@ -1,10 +1,14 @@
 /* Flicky do Jardim — layout responsivo (desktop + celular) e visual pixel art
 
    Estrutura: #hud (painel) → #mid (arena + controles) → #hint
-   - Retato:  painel COMPACTO no topo, arena logo abaixo (largura quase total),
-              controles logo após a arena; vazio residual só no fim (com dica de rotação)
-   - Paisagem: disposição escolhida pelo JS — laterais (#mid.mid-sides) ou abaixo,
-              sempre a que resultar na MAIOR arena
+   - Retrato: painel COMPACTO no topo, arena usando a LARGURA TODA,
+              controles logo abaixo; vazio residual só no fim (dica de rotação)
+   - Paisagem: faixa fina no topo, arena central e pares de controles nos
+              cantos inferiores (esquerda/direita juntos à esquerda,
+              arremesso/salto juntos à direita) — depoisais (#mid.mid-sides)
+              ou em faixa inferior (#mid), sempre a que der a MAIOR arena
+   - NENHUMA regra empilha botões: .pad é sempre flex-direction: row e
+      flex-wrap: nowrap (a única regra que empilhava foi removida nesta iteração)
    - O tamanho do #stage é calculado no JS: escala = min(largDisp/480, altDisp/270);
       a resolução interna do canvas é separada (visual × dpr com teto DPR_CAP)
    - Resolução lógica do jogo: 480×270 (nunca distorcida — aspect-ratio 16/9)
@@ -16,7 +20,8 @@
   --accent: #ffd34d;
   --text: #eaf2ff;
   --dim: #8fa6c4;
-  --gap: 0px;      /* espaçamento do grid da arena (8px quando há controles) */
+  --gap: 0px;      /* espaçamento do GRID (arena × controles) — 4px no toque */
+  --pair: 6px;     /* espaço entre os DOIS botões de um mesmo par */
   --btn: 60px;     /* tamanho dos botões de toque (calibrado por orientação) */
 }
 
@@ -30,12 +35,12 @@ html {
 body {
   height: 100%;
   margin: 0;
-  padding: 6px;
+  padding: 4px 0;                     /* laterais SEM preenchimento: a arena usa a largura toda */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;        /* empilha de cima: sem centralização em área grande */
-  gap: 6px;
+  gap: 4px;                           /* painel encostado na arena (era 6px) */
   overflow: hidden;
   background: radial-gradient(circle at 50% 20%, #1c2c4d 0%, #101a2e 70%);
   color: var(--text);
@@ -141,16 +146,18 @@ body {
   container-type: size;               /* permite 100cqw/100cqh nos filhos */
 }
 
-/* toque: tudo empilhado e encostado — vazio residual só no fim da área */
+/* toque: tudo encostado — vazio residual só no fim da área */
 body.has-touch #mid { align-content: start; }
 
-/* paisagem com controles nas laterais (escolhido quando dá a maior arena) */
+/* paisagem com controles nos cantos inferiores (escolhido quando dá a maior arena).
+   Cada trilha lateral é `auto` = largura do PAR inteiro (2 botões lado a lado);
+   os botões ficam encostados na base, junto ao polegar. */
 #mid.mid-sides {
   grid-template-areas: "padl stage padr";
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-rows: auto;
 }
-#mid.mid-sides .pad { flex-direction: column; align-self: end; }
+#mid.mid-sides .pad { align-self: end; }
 
 #stage {
   grid-area: stage;
@@ -158,6 +165,7 @@ body.has-touch #mid { align-content: start; }
   position: relative;
   box-sizing: content-box;            /* proporção exata NO conteúdo (canvas) */
   aspect-ratio: 16 / 9;
+  /* pré-dimensionamento; o JS sobrescreve com o cálculo exato min(larg/480, alt/270) */
   width: min(calc(100% - 8px), calc((100vh - 96px) * 16 / 9));
   background: #6ec6ff;
   border: 4px solid var(--ink);
@@ -185,9 +193,14 @@ body.has-touch #mid { align-content: start; }
 /* ---------------- controles de toque ---------------- */
 .touch-controls { display: none; }
 
+/* Cada par: SEMPRE lado a lado (esquerda→direita, arremesso→salto).
+   flex-direction: row + flex-wrap: nowrap — não existe regra que empilhe. */
 .pad {
   display: flex;
-  gap: var(--gap);
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--pair);
 }
 .pad-left  { grid-area: padl; justify-self: start; }
 .pad-right { grid-area: padr; justify-self: end; }
@@ -240,8 +253,9 @@ body.has-touch #muteLabel { display: none; }
 body.has-touch #record { display: none; }        /* recorde fica no menu/pausa */
 body.has-touch .hud-label { display: none; }     /* só os ícones de vida */
 body.has-touch #hud {
+  width: 100%;                      /* faixa de topo sem sobras laterais */
   gap: 4px;
-  padding: 3px 5px;
+  padding: 2px 4px;                 /* 44 (botão) + 4 + 4 = 52px de faixa */
   border-width: 2px;
   box-shadow: 0 2px 0 var(--ink);
   font-size: clamp(9px, 2.7vw, 13px);
@@ -249,26 +263,38 @@ body.has-touch #hud {
 body.has-touch .hud-box { border-width: 1px; padding: 2px 5px; }
 body.has-touch .hud-actions { gap: 4px; }
 
-/* RETRATO: painel no topo, arena em seguida, controles logo abaixo */
-body.has-touch { --btn: clamp(56px, 16vw, 72px); --gap: 8px; }
+/* RETRATO (e base do toque): painel imediatamente acima, arena usando a largura
+   toda e controles imediatamente abaixo. Botões entre 56 e 68px CSS. */
+body.has-touch {
+  --btn: clamp(56px, 16vw, 68px);
+  --gap: 4px;                       /* espaço arena × controles (grid) */
+}
+/* moldura fina no toque (2px/lado): recupera 4px de arena em cada eixo.
+   O JS usa o mesmo valor (STAGE_BORDER_TOUCH = 4) no cálculo da escala. */
 body.has-touch #stage {
-  width: min(calc(100% - 8px), calc((100vh - var(--btn) - var(--gap) - 110px) * 16 / 9));
+  border-width: 2px;
+  /* pré-dimensionamento; o JS sobrescreve com o cálculo exato */
+  width: min(calc(100% - 4px), calc((100vh - var(--btn) - var(--gap) - 110px) * 16 / 9));
 }
 @supports (width: 1cqw) {
   body.has-touch #stage {
-    width: min(calc(100% - 8px), calc((100cqh - var(--btn) - var(--gap)) * 16 / 9));
+    width: min(calc(100% - 4px), calc((100cqh - var(--btn) - var(--gap)) * 16 / 9));
   }
 }
 
-/* PAISAGEM: botões entre 56–72px conforme a altura; dica de rotação não faz sentido.
-   A disposição (laterais × abaixo) é escolhida pelo JS conforme der a MAIOR arena. */
+/* PAISAGEM: faixa fina no topo, arena central, pares de controles junto aos
+   polegares. Botões entre 56–68px conforme a altura; dica de rotação não faz
+   sentido. A disposição (cantos laterais × faixa inferior) é escolhida pelo JS
+   sempre pela que der a MAIOR arena — nenhuma delas empilha os botões. */
 @media (orientation: landscape) {
-  body.has-touch { --btn: clamp(56px, 13vh, 72px); }
+  body.has-touch { --btn: clamp(56px, 13vh, 68px); }
   body.has-touch #hint { display: none; }
-  /* aproximação pré-JS (o JS sobrescreve com o cálculo exato) */
+  /* aproximação pré-JS para o modo lateral (dois pares de 2 botões + folgas);
+     o JS sobrescreve com o cálculo exato */
   @supports (width: 1cqw) {
     body.has-touch #stage {
-      width: min(calc(100% - 8px - 2 * var(--btn) - 16px), calc(100cqh * 16 / 9));
+      width: min(calc(100% - 4px - 4 * var(--btn) - 2 * var(--pair) - 8px),
+                 calc(100cqh * 16 / 9));
     }
   }
 }
@@ -366,13 +392,15 @@ body.has-touch .panel p {
 }
 body.has-touch #hint { font-size: clamp(9px, 2.4vw, 12px); }
 
-/* ---------------- áreas seguras (notch / barra de gestos) ---------------- */
+/* ---------------- áreas seguras (notch / barra de gestos) ----------------
+   Lateral SEM preenchimento extra: os inset já protegem, e assim a arena
+   aproveita a largura inteira (retrato) / todo o miolo livre (paisagem). */
 @supports (padding: env(safe-area-inset-bottom)) {
   body {
-    padding-top: calc(6px + env(safe-area-inset-top));
-    padding-right: calc(6px + env(safe-area-inset-right));
-    padding-bottom: calc(6px + env(safe-area-inset-bottom));
-    padding-left: calc(6px + env(safe-area-inset-left));
+    padding-top: calc(4px + env(safe-area-inset-top));
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: calc(4px + env(safe-area-inset-bottom));
+    padding-left: env(safe-area-inset-left);
   }
 }
 

@@ -860,23 +860,36 @@
   /* ---------------- layout: escala visual da arena (min da largura/altura) ----------------
      O tamanho VISUAL do #stage (CSS px) é definido aqui; a resolução interna de
      renderização continua sendo a do canvas (visual × dpr com teto) em resizeCanvas(). */
-  var STAGE_BORDER = 8;               // moldura do #stage (4px por lado)
+  var STAGE_BORDER = 8;               // moldura do #stage no desktop (4px por lado)
+  var STAGE_BORDER_TOUCH = 4;         // moldura no toque (2px por lado — devolve arena)
+  var GRID_GAP = 4;                   // folga arena × controles (== --gap no toque)
+  var PAIR_GAP = 6;                   // folga entre os 2 botões de um par (== --pair)
   var layoutMode = null;              // 'below' | 'sides' | null (ainda não calculado)
 
-  /* puro: escolhe a disposição e a escala maiores preservando 16/9 */
-  function computeLayout(availW, availH, ctrl, gap, landscape) {
+  /* puro: escolhe a disposição e a escala maiores preservando 16/9.
+     ctrl    = tamanho medido de um botão de toque (0 = sem controles)
+     gap     = folga do grid entre arena e controles
+     pair    = folga entre os dois botões de um mesmo par (nunca são empilhados)
+     border  = moldura total do #stage (4 no toque, 8 no desktop)                */
+  function computeLayout(availW, availH, ctrl, gap, landscape, pair, border) {
+    if (typeof gap !== 'number') gap = 0;
+    if (typeof pair !== 'number') pair = PAIR_GAP;
+    if (typeof border !== 'number') border = STAGE_BORDER;
     var LW = LEVEL.W, LH = LEVEL.H;
     var hasCtrl = ctrl > 0;
-    // controles abaixo: arena pega a largura toda e a altura menos o bloco de botões
+    // controles abaixo: arena pega a largura toda e a altura menos a faixa de botões
     var sBelow = Math.min(
-      (availW - STAGE_BORDER) / LW,
-      (availH - (hasCtrl ? ctrl + gap : 0) - STAGE_BORDER) / LH
+      (availW - border) / LW,
+      (availH - (hasCtrl ? ctrl + gap : 0) - border) / LH
     );
-    // controles nas laterais: arena perde as faixas dos botões, ganha a altura toda
+    // controles nos cantos inferiores: cada trilha lateral precisa acomodar o PAR
+    // inteiro lado a lado (2 botões + folga entre eles) — por isso a largura do
+    // palco é descontada 2 × (2·ctrl + pair) + 2 folgas de grid
+    var railW = 2 * ctrl + pair;
     var sSides = hasCtrl
       ? Math.min(
-          (availW - 2 * ctrl - 2 * gap - STAGE_BORDER) / LW,
-          (availH - STAGE_BORDER) / LH
+          (availW - 2 * railW - 2 * gap - border) / LW,
+          (availH - border) / LH
         )
       : sBelow;
     var mode = 'below', scale = sBelow;
@@ -907,10 +920,12 @@
     var sample = document.getElementById('btnLeft');
     var sr = measureRect(sample);
     if (sr) ctrl = Math.max(sr.width, sr.height);
-    var gap = ctrl > 0 ? 8 : 0;
+    var hasCtrl = ctrl > 0;
+    var gap = hasCtrl ? GRID_GAP : 0;               // folga do grid (== --gap)
+    var border = hasCtrl ? STAGE_BORDER_TOUCH : STAGE_BORDER;   // == border-width do CSS
     var landscape = window.innerWidth != null && window.innerHeight != null &&
       window.innerWidth >= window.innerHeight;
-    var L = computeLayout(rect.width, rect.height, ctrl, gap, landscape);
+    var L = computeLayout(rect.width, rect.height, ctrl, gap, landscape, PAIR_GAP, border);
     if (!(L.scale > 0)) return;
     stageEl.style.width = L.w + 'px';
     stageEl.style.height = L.h + 'px';

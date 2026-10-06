@@ -83,9 +83,9 @@ Observações:
 
 | Ação | Teclado | Toque (celular/tablet) |
 | --- | --- | --- |
-| Mover | ← → ou A / D | Botões ◀ ▶ (esquerda, polegar esquerdo) |
-| Pular | Espaço, W ou ↑ | Botão ▲ (direita, polegar direito) |
-| Arremessar objeto | X ou J | Botão ➤ laranja (direita, polegar direito) |
+| Mover | ← → ou A / D | ◀ ▶ **lado a lado** (esquerda, polegar esquerdo) |
+| Pular | Espaço, W ou ↑ | ▲ **lado a lado com ➤** (direita, polegar direito) |
+| Arremessar objeto | X ou J | ➤ laranja **lado a lado com ▲** (direita, polegar direito) |
 | Pausar / retomar | Esc ou P | Botão ⏸ no HUD (ou "Continuar") |
 | Ligar/desligar som | M | Botão de som no HUD (ícone) |
 | Tela cheia | — | Botão ⛶ no HUD (só se o navegador suportar) |
@@ -99,10 +99,14 @@ Observações:
 - No toque, a movimentação continua enquanto o botão estiver pressionado.
 - Perder o foco da janela/aba, trocar de aplicativo ou pausar **limpa todos os
   comandos** (nada fica "pendurado" ao voltar).
-- O layout é responsivo em **retrato** (HUD no topo, arena no centro,
-  controles abaixo — nunca cobrindo a arena) e **paisagem** (controles nas
-  trilhas laterais), respeitando notch e barra de gestos
-  (`env(safe-area-inset-*)`), sem travar a orientação nem exigir tela cheia.
+- O layout é responsivo em **retrato** (painel compacto no topo, arena ocupando
+  a largura toda, controles logo abaixo) e em **paisagem** (faixa fina no topo,
+  arena central e pares de controles junto aos polegares). Em **ambas** as
+  orientações os pares ficam **lado a lado** — ◀ ▶ à esquerda, ➤ ▲ à direita —
+  nunca empilhados, e a arena é calculada como a maior que couber no espaço
+  visível. O jogo nunca cobre personagens, plataformas ou a porta com os
+  controles, respeita notch e barra de gestos (`env(safe-area-inset-*)`) e não
+  trava a orientação nem exige tela cheia.
 - **Girar o celular recalcula o layout sem reiniciar a partida** (fase, pontos,
   vidas e posições permanecem).
 
@@ -187,12 +191,13 @@ jogo-flicky/
 │   ├── level.js          # Carregador central de fases + cenários temáticos (cache)
 │   └── game.js           # Física, fila/histórico, gatos, arremesso, estados, HUD,
 │                         #   entrada unificada (teclado+toque), resize/DPR, laço rAF
-├── PLANO_IMPLEMENTACAO.md# Plano da adaptação mobile (8 etapas)
+├── PLANO_IMPLEMENTACAO.md# Plano da adaptação mobile (9 etapas)
 ├── README.md             # Este arquivo
 └── tests/                # Testes (opcional, requer Node.js)
-    ├── headless.js       # Suíte headless (442 asserções)
+    ├── headless.js       # Suíte headless (450 asserções)
     ├── render.js         # Renderizador software → PNGs em tests/out/
     ├── layout-preview.js # Capturas reais do layout (Chrome/Edge headless)
+    ├── measure.js        # Medição numérica do layout antes × depois
     └── out/              # Frames de inspeção e capturas de layout geradas
 ```
 
@@ -201,7 +206,7 @@ jogo-flicky/
 Os testes rodam no **Node.js** e não são necessários para jogar.
 
 ```bash
-# Regressão de lógica/física/regras + mobile (442 asserções)
+# Regressão de lógica/física/regras + mobile (450 asserções)
 node tests/headless.js
 
 # Gerar frames de inspeção em tests/out/*.png
@@ -209,6 +214,9 @@ node tests/render.js
 
 # Capturas reais do layout (vertical/paisagem/desktop) via Chrome/Edge headless
 node tests/layout-preview.js
+
+# Medição numérica do layout (arena, painel, botões, pares lado a lado)
+node tests/measure.js DEPOIS
 ```
 
 A suíte cobre, entre outros: menu/inicialização, física e salto, laço principal
@@ -225,9 +233,11 @@ teclado+toque por origem, multitoque (andar+saltar, andar+arremessar),
 ocultar a aba aguardando o jogador, resize/rotação preservando a partida, teto
 de `devicePixelRatio`, persistência do som, instruções adaptadas ao toque,
 matemática de layout (**escala `min(larguraDisp/480, alturaDisp/270)`,
-disposição automática laterais×abaixo pela maior arena, rotação sem comandos
-presos**) e verificações estáticas de marcação/estilo (controles fora da arena,
-viewport, áreas seguras, alvos 48px)**.
+disposição automática cantos×faixa inferior pela maior arena, trilhas laterais
+que acomodam o par inteiro, rotação sem comandos presos**) e verificações
+estáticas de marcação/estilo (controles fora da arena, viewport, áreas seguras,
+alvos 48px, botões 56–68px, `.pad` sempre `row`+`nowrap` e a remoção da regra
+que empilhava os botões)**.
 
 ## Navegadores
 

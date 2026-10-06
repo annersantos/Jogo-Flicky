@@ -220,3 +220,115 @@ corretos — o problema era **distribuição de espaço e chrome de interface**.
   disposição inferior escolhida automaticamente quando maior.
 - Girar/redimensionar preserva fase, pontos, vidas e posições; nenhum comando preso.
 - Desktop: layout e controles como estavam. Suíte completa verde + capturas geradas.
+
+---
+
+## 9. Controles lado a lado nas DUAS orientações + maior arena (iteração 3)
+
+> Exigências desta iteração: (a) ◀ ▶ e ➤ ▲ sempre **lado a lado**, em retrato e
+> em paisagem; (b) **ampliar a arena** removendo só o que é desnecessário;
+> (c) paisagem com faixa fina no topo, arena ao centro e controles compactos —
+> comparando "cantos inferiores × faixa inferior" e usando a de **maior arena**;
+> (d) preservar fases, física, pontuação e progresso.
+
+### 9.1 Causas encontradas (inspeção antes de mexer)
+
+**Por que os botões de movimento ficaram um em cima do outro**
+
+| Origem | Efeito |
+| --- | --- |
+| `#mid.mid-sides .pad { flex-direction: column; align-self: end; }` | Única regra que empilhava. A disposição `mid-sides` é **automática em paisagem** (escolhida por dar a maior arena) → ◀ sobre ▶ e ➤ sobre ▲ com um dedo em cima do outro |
+| `.pad { display: flex; }` sem `flex-direction`/`flex-wrap` explícitos | lado a lado só por herança implícita — nada garantia a linha nem impedia futuras regras de quebra |
+
+Em **retrato** os pares já eram linha (`L/R OK` na medição); o defeito aparecia
+em **paisagem** — que é justamente onde a dica manda girar o celular.
+
+**O que limitava o tamanho da arena**
+
+| Limite | Onde | Perda |
+| --- | --- | --- |
+| Margem lateral do `body` (`padding: 6px`) | `style.css` | 12px de largura em **retrato** (378 de 390) |
+| Moldura de 4px/lado do `#stage` | `style.css` + `STAGE_BORDER = 8` | 8px em cada eixo nas duas orientações |
+| `gap` do `body` (6px) + `--gap` (8px) | `style.css` | 10px de altura em **paisagem** (altura é o fator limitante lá: 16:9 em tela de ~2,2:1) |
+| HUD `width: max-content` centralado, 2 linhas, botões de 48px | `style.css` | sobras laterais + altura extra em paisagem |
+| `computeLayout` cobrando das trilhas laterais **1 botão** (`2·ctrl`) enquanto o par agora tem **2** | `js/game.js` | sem corrigir, a arena invadiria os botões |
+| Retrato: **largura** é o fator limitante | — | o cenário é 16:9 e já ocupava quase toda a largura; os ~450px de vazio vertical **não** podem virar arena sem distorcer/cortar (a isso a orientação manda reconhecer + dica de rotação, não "prometer" ganho) |
+
+### 9.2 Tarefas
+
+- [x] **Sem regra que empilhe**: `.pad { flex-direction: row; flex-wrap: nowrap; align-items: center; gap: var(--pair) }`;
+  removido o `flex-direction: column` de `#mid.mid-sides .pad` (mantido só
+  `align-self: end`, para o par ficar encostado na base, junto ao polegar).
+  Teste estático: `/.pad { … flex-direction: row }/`, `flex-wrap: nowrap` e
+  `!/#mid.mid-sides .pad { … flex-direction/`.
+- [x] **Pares entre 56 e 68px CSS**: `--btn: clamp(56px, 16vw, 68px)` (retrato) e
+  `clamp(56px, 13vh, 68px)` (paisagem); folga fixa de **6px** entre os dois
+  botões do par (`--pair`) e **4px** entre arena e controles (`--gap`).
+- [x] **HUD vira faixa de topo**: `width: 100%` (sem sobras laterais), `padding: 2px 4px`,
+  `gap: 4px`, botões de ação 44×44 → **faixa de 52px em uma linha** em paisagem;
+  em retrato continua em 2 linhas (78px) porque os textos exigidos
+  ("Pontos", "Fase", "Resgatados", vidas, ⏸/som/tela cheia) não cabem em 378px.
+- [x] **Sem margem lateral**: `body { padding: 4px 0 }` → a arena em retrato usa
+  a **largura inteira da viewport** (390 de 390). Áreas seguras continuam via
+  `env(safe-area-inset-*)` (só topo/base/laterais do notch).
+- [x] **Moldura fina no toque**: `border-width: 2px` (4px no desktop, como estava)
+  → `STAGE_BORDER_TOUCH = 4` no JS, mantendo `aspect-ratio`/proporção exatas.
+- [x] **Custo real das trilhas laterais**: `computeLayout` agora desconta
+  `2 × (2·ctrl + pair) + 2·gap` por lado — o par **inteiro** lado a lado cabe na
+  trilha e nada cobre a arena (asserção `2·trilha + 2·gap + w + moldura ≤ largura`).
+- [x] **Comparação exigida**: em paisagem o JS calcula as duas disposições
+  ("cantos inferiores" × "faixa inferior") e escolhe a de **maior arena**;
+  nenhuma delas empilha. Em retrato só existe a faixa inferior.
+- [x] **Dica de rotação discreta** permanece em retrato (`#hint`, 9–11px, escura)
+  e some em paisagem; nenhuma promessa de ganho vertical quando a largura é o limite.
+- [x] **Redimensionamento**: `resize`/`orientationchange`/`visualViewport.resize`
+  + `100dvh` recalculam a escala; `clearInput()` na troca de disposição — fase,
+  pontos, vidas e posições intactos. Backbuffer continua `visual × dpr` com
+  `DPR_CAP` e `imageSmoothingEnabled = false` (pixel art nítido).
+- [x] **Validação**: `tests/measure.js` ganhou métricas do overlay (caixa do
+  painel × arena e quanto o texto rola).
+
+### 9.3 Medição antes × depois (mesmo aparelho/viewport simulado, Chrome headless)
+
+| Cenário | Arena antes | Arena depois | Escala | Pares |
+| --- | --- | --- | --- | --- |
+| Retrato 390×844 (iPhone 13) | 378×216 | **390×221** | 0,79 → **0,81** | lado a lado → lado a lado |
+| Retrato 390×650 (barras abertas) | 378×216 | **390×221** | 0,79 → **0,81** | OK |
+| Retrato 360×640 (referência) | 348×199 | **360×204** | 0,73 → **0,75** | OK |
+| **Paisagem 844×390 (iPhone 13)** | 559×318 | **576×326** | 1,16 → **1,20** | **EMPILHADO → lado a lado** |
+| Paisagem 844×330 (barras abertas) | 452×258 | **470×266** | 0,94 → **0,98** | **EMPILHADO → lado a lado** |
+| Paisagem 740×360 (janela estreita) | 506×288 | 496×281 | 1,05 → 1,03 | **EMPILHADO → lado a lado** |
+| Desktop 1280×720 | 1112×629 | **1126×637** | 2,32 → **2,35** | OK |
+
+Leitura honesta dos números:
+
+- **Retrato**: ganho de 12px de largura (margem lateral removida) → +5px de altura
+  da arena. Como a largura é o fator limitante, **é o máximo possível** sem
+  esticar/cortar o cenário; o vazio vertical restante é irrelevante para a arena.
+- **Paisagem 844×390**: +17px de largura e +8px de altura (margem lateral, gap,
+  moldura e HUD mais fino) — em paisagem o limite é a **altura**.
+- **Paisagem 844×330 (barras do navegador abertas)**: a altura útil cai 60px, mas
+  a faixa de topo mais fina (72 → 64px de cromo) e a moldura fina devolvem
+  altura à arena: 452×258 → **470×266** mesmo com as barras ocupando espaço.
+- **Paisagem 740×360**: −10px de largura. As trilhas laterais agora acomodam o par
+  **inteiro** (2 botões + folga = 118px cada, eram 64px) e manter os botões lado
+  a lado em ambas as orientações é exigência desta iteração; mesmo assim a
+  disposição **cantos** continua sendo a maior para essa janela (faixa inferior
+  daria só 412×232).
+- **Desktop**: ganho de 14px (sem margem lateral); HUD, controles, hint e
+  moldura de 4px intactos.
+
+### 9.4 Critérios de conclusão
+
+- ◀ ▶ e ➤ ▲ lado a lado em **retrato e paisagem** (`L/R OK · Ação OK` nas 7
+  medições), `flex-direction: row` + `flex-wrap: nowrap` e nenhuma regra que
+  empilhe (asserções estáticas).
+- Botões 56–68px CSS, folga de 6px entre eles, alvos ≥48px; multitoque
+  (andar+saltar, andar+arremessar) e `pointerup`/`pointercancel` encerrando o
+  comando — as mesmas asserções seguem verdes.
+- Arena = maior `min(larguraDisp/480, alturaDisp/270)` que couber; proporção 16/9
+  em todas as escalas; controles e HUD **fora** da arena (nenhuma interseção).
+- Girar/redimensionar preserva fase, pontos, vidas, posições e fila; nenhum
+  comando preso na troca de disposição.
+- Suíte completa: **450 asserções, 0 falhas**; capturas de retrato, paisagem e
+  desktop regeneradas em `tests/out/`.

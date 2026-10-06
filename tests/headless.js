@@ -971,22 +971,31 @@ section('Marcação e estilo: controles fora da arena, viewport e segurança');
 section('Layout: escala min(larg/alt), disposição automática e rotação segura');
 {
   // --- matemática pura (a mesma executada no navegador) ---
-  var L1 = Flicky.computeLayout(378, 683, 62, 8, false);
-  ok(L1.mode === 'below' && L1.w === 370 && L1.h === 208,
-     'retrato iPhone 13: arena na largura total (' + L1.w + 'x' + L1.h + ', controles abaixo)');
+  // folgas novas: gap 4 (grid), pair 6 (entre os 2 botões), moldura 4 no toque
+  var L1 = Flicky.computeLayout(390, 739, 62, 4, false, 6, 4);
+  ok(L1.mode === 'below' && L1.w === 386 && L1.h === 217,
+     'retrato iPhone 13: arena na largura toda (' + L1.w + 'x' + L1.h + ', controles abaixo)');
 
-  var L2 = Flicky.computeLayout(738, 294, 64, 8, true);
-  ok(L2.mode === 'sides' && L2.w === 508 && L2.h === 286,
-     'paisagem iPhone 13: controles laterais (' + L2.w + 'x' + L2.h + ')');
-  var abaixo = Flicky.computeLayout(738, 294, 64, 8, false);
-  ok(L2.scale > abaixo.scale, 'laterais escolhidas por dar a MAIOR arena');
+  var L2 = Flicky.computeLayout(750, 305, 56, 4, true, 6, 4);
+  ok(L2.mode === 'sides' && L2.w === 502 && L2.h === 282,
+     'paisagem iPhone 13 (com notch): pares nos cantos (' + L2.w + 'x' + L2.h + ')');
+  var abaixo = Flicky.computeLayout(750, 305, 56, 4, false, 6, 4);
+  ok(L2.scale > abaixo.scale, 'cantos escolhidos por dar a MAIOR arena');
+  ok(abaixo.mode === 'below', 'sem paisagem a disposição é faixa inferior');
 
-  var L3 = Flicky.computeLayout(500, 400, 56, 8, true);
+  var L3 = Flicky.computeLayout(500, 400, 56, 4, true, 6, 4);
   ok(L3.mode === 'below' && L3.scale > 0, 'janela estreita/alta: controles abaixo é maior → escolhido');
 
   var L4 = Flicky.computeLayout(1200, 600, 0, 8, true);
   ok(L4.mode === 'below' && L4.w === 1052 && L4.h === 592,
      'desktop sem controles: min(' + L4.w + '/480, ' + L4.h + '/270) da área disponível');
+
+  // pares lado a lado: a trilha lateral precisa de 2 botões + folga entre eles
+  // e a arena + as duas trilhas têm que caber na largura (nada cobre a arena)
+  var L5 = Flicky.computeLayout(750, 305, 56, 4, true, 6, 4);
+  var trilha = 2 * 56 + 6;
+  ok(2 * trilha + 2 * 4 + L5.w + 4 <= 750.01,
+     'pares cabem nas laterais sem cobrir a arena (trilha de ' + trilha + 'px cada)');
 
   var todos = [L1, L2, L3, L4], ratioOk = true;
   for (var li = 0; li < todos.length; li++) {
@@ -1000,15 +1009,15 @@ section('Layout: escala min(larg/alt), disposição automática e rotação segu
   var btnEl = document.getElementById('btnLeft');
   var savedW = window.innerWidth, savedH = window.innerHeight;
   window.innerWidth = 390; window.innerHeight = 844;            // retrato iPhone 13
-  midEl.getBoundingClientRect = function () { return { width: 378, height: 683 }; };
+  midEl.getBoundingClientRect = function () { return { width: 390, height: 739 }; };
   btnEl.getBoundingClientRect = function () { return { width: 62, height: 62 }; };
 
   var antes = Flicky.get();
   var px = Flicky.player().x, py = Flicky.player().y;
 
   Flicky.layout();
-  ok(stageEl.style.width === '370px' && stageEl.style.height === '208px',
-     'tamanho visual aplicado no #stage (370x208 CSS px, separado do canvas)');
+  ok(stageEl.style.width === '386px' && stageEl.style.height === '217px',
+     'tamanho visual aplicado no #stage (386x217 CSS px, largura toda, separado do canvas)');
   ok(!midEl.classList.contains('mid-sides'), 'retrato: controles logo abaixo da arena');
   ok(Flicky.get().phase === antes.phase && Flicky.get().score === antes.score &&
      Flicky.get().lives === antes.lives &&
@@ -1019,12 +1028,12 @@ section('Layout: escala min(larg/alt), disposição automática e rotação segu
   fire('btnRight', 'pointerdown', { preventDefault() {}, pointerId: 61 });
   ok(Flicky.input.right === true, 'toque ativo antes do giro');
   window.innerWidth = 844; window.innerHeight = 390;            // paisagem iPhone 13
-  midEl.getBoundingClientRect = function () { return { width: 738, height: 294 }; };
-  btnEl.getBoundingClientRect = function () { return { width: 64, height: 64 }; };
+  midEl.getBoundingClientRect = function () { return { width: 844, height: 326 }; };
+  btnEl.getBoundingClientRect = function () { return { width: 56, height: 56 }; };
   Flicky.layout();
-  ok(midEl.classList.contains('mid-sides'), 'paisagem: disposição lateral aplicada');
-  ok(stageEl.style.width === '508px' && stageEl.style.height === '286px',
-     'arena recalculada no giro (508x286)');
+  ok(midEl.classList.contains('mid-sides'), 'paisagem: pares nos cantos inferiores aplicados');
+  ok(stageEl.style.width === '572px' && stageEl.style.height === '322px',
+     'arena recalculada no giro (572x322 — maior que em retrato)');
   ok(Flicky.input.right === false, 'giro limpa os comandos (nada fica preso)');
   ok(Flicky.get().phase === antes.phase && Flicky.get().score === antes.score &&
      Flicky.get().lives === antes.lives &&
@@ -1033,10 +1042,11 @@ section('Layout: escala min(larg/alt), disposição automática e rotação segu
 
   // volta ao retrato → volta para controles abaixo
   window.innerWidth = 390; window.innerHeight = 844;
-  midEl.getBoundingClientRect = function () { return { width: 378, height: 683 }; };
+  midEl.getBoundingClientRect = function () { return { width: 390, height: 739 }; };
   btnEl.getBoundingClientRect = function () { return { width: 62, height: 62 }; };
   Flicky.layout();
   ok(!midEl.classList.contains('mid-sides'), 'volta ao retrato: controles abaixo de novo');
+  ok(stageEl.style.width === '386px', 'volta ao retrato: arena de largura toda de novo');
 
   // sem medidas de layout → não lança erro nem mexe no estado
   delete midEl.getBoundingClientRect;
@@ -1057,8 +1067,18 @@ section('Layout: escala min(larg/alt), disposição automática e rotação segu
   ok(css2.includes('100dvh'), 'altura dinâmica (dvh) para as barras do navegador');
   ok(css2.includes('body.has-touch #record { display: none; }'),
      'HUD compacto: recorde sai do painel (fica no menu)');
-  ok(css2.includes('clamp(56px, 16vw, 72px)') && css2.includes('clamp(56px, 13vh, 72px)'),
-     'botões de ação entre 56 e 72 px conforme o espaço');
+  ok(css2.includes('clamp(56px, 16vw, 68px)') && css2.includes('clamp(56px, 13vh, 68px)'),
+     'botões de ação entre 56 e 68 px conforme o espaço');
+  ok(css2.includes('--pair: 6px'), 'folga fixa entre os dois botões de um par');
+  ok(/\.pad\s*\{[^}]*flex-direction:\s*row/.test(css2) &&
+     /\.pad\s*\{[^}]*flex-wrap:\s*nowrap/.test(css2),
+     '.pad é flex row + nowrap (pares sempre lado a lado, nas duas orientações)');
+  ok(!/#mid\.mid-sides\s+\.pad\s*\{[^}]*flex-direction/.test(css2),
+     'removida a regra que empilhava os botões na disposição lateral');
+  ok(/body\.has-touch #stage\s*\{[^}]*border-width:\s*2px/.test(css2),
+     'moldura fina no toque (2px/lado) devolvendo 4px de arena');
+  ok(/body\.has-touch #hud\s*\{[^}]*width:\s*100%/.test(css2),
+     'HUD vira faixa de topo sem sobras laterais');
 }
 
 

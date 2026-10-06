@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>measure</title>
+<style>html,body{margin:0;padding:0;background:#05070d;overflow:hidden}
+iframe{border:0;display:block}pre{display:none}</style></head>
+<body><pre id="out">RESULT:{"ok":false,"err":"sem execucao"}</pre>
+<script>
+var q = new URLSearchParams(location.search);
+var W = +(q.get('w') || 390), H = +(q.get('h') || 844);
+var f = document.createElement('iframe');
+f.src = q.get('src') || 'preview.html';
+f.width = W + 'px'; f.height = H + 'px';
+document.body.appendChild(f);
+
+function n(v) { return Math.round(v * 100) / 100; }
+function rect(r) { return r ? { x: n(r.x), y: n(r.y), w: n(r.width), h: n(r.height) } : null; }
+function hit(a, b) {
+  if (!a || !b) return false;
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+function emit(obj) {
+  document.getElementById('out').textContent = 'RESULT:' + JSON.stringify(obj);
+}
+function measure() {
+  var out = { ok: false };
+  try {
+    var w = f.contentWindow, d = f.contentDocument;
+    if (!w || !d) { out.err = 'sem acesso ao iframe'; return out; }
+    var g = function (id) { return d.getElementById(id); };
+    var r = function (el) { return el ? rect(el.getBoundingClientRect()) : null; };
+    var stage = r(g('stage')), hud = r(g('hud')), mid = r(g('mid')), hint = r(g('hint'));
+    var bl = r(g('btnLeft')), br = r(g('btnRight')), bt = r(g('btnThrow')), bj = r(g('btnJump'));
+    var nodeL = g('btnLeft'), nodeR = g('btnThrow');
+    var padL = nodeL && nodeL.parentNode, padR = nodeR && nodeR.parentNode;
+    var cs = function (el, p) {
+      try { return el ? w.getComputedStyle(el)[p] : ''; } catch (e) { return ''; }
+    };
+    var canvas = g('game');
+    out = {
+      ok: true,
+      vw: w.innerWidth, vh: w.innerHeight, dpr: w.devicePixelRatio,
+      touch: d.body.classList.contains('has-touch'),
+      mode: (g('mid').className || '(nenhuma)'),
+      bodyPad: cs(d.body, 'paddingLeft') + ' ' + cs(d.body, 'paddingTop'),
+      hud: hud, mid: mid, stage: stage, hint: hint,
+      hintDisplay: cs(g('hint'), 'display'),
+      btn: { left: bl, right: br, throw: bt, jump: bj },
+      btnSize: bl ? bl.w : 0,
+      padDirL: cs(padL, 'flexDirection'), padWrapL: cs(padL, 'flexWrap'),
+      padDirR: cs(padR, 'flexDirection'),
+      moveSideBySide: !!(bl && br && bl.x + bl.w <= br.x + 0.5),
+      actionSideBySide: !!(bt && bj && bt.x + bt.w <= bj.x + 0.5),
+      moveSameRow: !!(bl && br && Math.abs(bl.y - br.y) < 1),
+      overlapControls: hit(stage, bl) || hit(stage, br) || hit(stage, bt) || hit(stage, bj),
+      overlapHud: hit(stage, hud),
+      gapHudStage: (hud && stage) ? n(stage.y - (hud.y + hud.h)) : null,
+      gapStageCtrl: (stage && bl) ? n(bl.y - (stage.y + stage.h)) : null,
+      gapPair: (bl && br) ? n(br.x - (bl.x + bl.w)) : null,
+      scale: stage ? n(stage.w / 480) : 0,
+      panel: r(g('overlay')),
+      panelBox: r(d.querySelector('#overlay .panel')),
+      panelScroll: (function () {
+        var p = d.querySelector('#overlay .panel p');
+        if (!p) return null;
+        return { txt: p.scrollHeight, box: p.clientHeight, corte: p.scrollHeight - p.clientHeight };
+      })(),
+      freeBelow: null
+    };
+    if (stage && mid) out.freeBelow = n((mid.y + mid.h) - (stage.y + stage.h));
+  } catch (e) {
+    out.err = String((e && e.message) || e);
+  }
+  return out;
+}
+var tries = 0;
+function run() {
+  tries++;
+  try {
+    var w = f.contentWindow;
+    if (w && w.document && w.document.readyState === 'complete' && w.Flicky) {
+      setTimeout(function () { emit(measure()); }, 450);
+      return;
+    }
+  } catch (e) { /* ainda carregando */ }
+  if (tries < 80) setTimeout(run, 80);
+  else emit({ ok: false, err: 'timeout (Flicky indisponível)' });
+}
+f.addEventListener('load', function () { setTimeout(run, 60); });
+setTimeout(run, 200);
+</script>
+</body></html>
